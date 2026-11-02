@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Grabber — guide</title>
+<link rel="stylesheet" href="../../extension/popup/popup.css">
+<style>
+  body.r {
+    width: 1200px; overflow: hidden; margin: 0; position: relative;
+    font: 400 16px/24px var(--g-font); color: var(--g-text);
+    -webkit-font-smoothing: antialiased;
+    background:
+      radial-gradient(40% 25% at 0% 0%, #8DB8FF 0%, rgba(141,184,255,0) 100%),
+      radial-gradient(35% 22% at 100% 8%, #B3CEFF 0%, rgba(179,206,255,0) 100%),
+      radial-gradient(45% 28% at 100% 62%, #A9C8FF 0%, rgba(169,200,255,0) 100%),
+      radial-gradient(40% 25% at 0% 78%, #CFE0FF 0%, rgba(207,224,255,0) 100%),
+      radial-gradient(50% 20% at 50% 100%, #94BCFF 0%, rgba(148,188,255,0) 100%),
+      var(--g-bg);
+  }
+  .wrap { padding: 56px 64px; display: flex; flex-direction: column; gap: 40px; }
+
+  /* шапка */
+  .hero { display: flex; align-items: center; gap: 24px; }
+  .hero img { width: 96px; height: 96px; }
+  .hero h1 { font-size: 44px; line-height: 48px; font-weight: 700; letter-spacing: -0.03em; }
+  .hero h1 small { font-size: 20px; font-weight: 500; color: var(--g-text-3); letter-spacing: 0; margin-left: 8px; }
+  .hero p { font-size: 19px; line-height: 28px; color: var(--g-text-2); margin-top: 6px; }
+  .tags { display: flex; gap: 8px; margin-top: 14px; }
+  .tag { padding: 5px 12px; border-radius: 99px; background: rgba(255,255,255,.7); border: 1px solid var(--g-glass-border); font-size: 14px; font-weight: 500; color: var(--g-text-2); }
+
+  /* заголовки секций */
+  .sec-h { display: flex; align-items: baseline; gap: 12px; margin-bottom: 18px; }
+  .sec-h h2 { font-size: 26px; line-height: 32px; font-weight: 700; letter-spacing: -0.02em; }
+  .sec-h span { font-size: 16px; color: var(--g-text-3); }
+
+  /* шаги установки */
+  .steps { display: flex; flex-direction: column; gap: 20px; }
+  .card { border-radius: 20px; padding: 28px; display: grid; grid-template-columns: 380px minmax(0, 1fr); gap: 36px; align-items: center; }
+  .card .txt { display: flex; flex-direction: column; gap: 14px; }
+  .num { width: 36px; height: 36px; border-radius: 50%; background: var(--g-accent); color: #fff; font-weight: 700; font-size: 18px; display: grid; place-items: center; flex: 0 0 auto; }
+  .card h3 { margin: 0; font-size: 19px; line-height: 25px; font-weight: 700; letter-spacing: -0.01em; }
+  .card p { margin: 0; color: var(--g-text-2); font-size: 15px; line-height: 22px; }
+  .card .head { display: flex; gap: 12px; align-items: center; }
+  .ill { margin-top: auto; height: 196px; border-radius: 14px; background: rgba(255,255,255,.6); border: 1px solid var(--g-line-2); position: relative; overflow: hidden; }
+  .mono { font-family: var(--g-mono); }
+  .hl { box-shadow: 0 0 0 3px #FFB020, 0 0 0 7px rgba(255,176,32,.25); border-radius: 6px; }
+  .pin-n { position: absolute; width: 24px; height: 24px; border-radius: 50%; background: #FFB020; color: #3B2600; font: 700 13px/24px var(--g-font); text-align: center; box-shadow: 0 2px 6px rgba(0,0,0,.15); }
+
+  /* метка-номер, крепится к подсвеченному элементу */
+  .hl { position: relative; }
+  .hl > .pin-n { top: -12px; right: -12px; }
+  .pin-n { position: absolute; z-index: 3; }
+  .ill { display: flex; flex-direction: column; justify-content: center; padding: 16px 14px; overflow: visible; }
+  .dev .g-switch { transform: scale(.8); margin: 0 -4px; }
+
+  /* SmartScreen */
+  .ss { background: #0B5CAD; border-radius: 8px; color: #fff; padding: 16px 16px 14px; font: 400 12px/17px "Segoe UI", sans-serif; }
+  .ss b { display: block; font: 600 15px/20px "Segoe UI", sans-serif; margin-bottom: 4px; }
+  .ss .more { display: inline-block; margin-top: 8px; padding: 1px 4px; text-decoration: underline; }
+  .ss .btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+  .ss .btns span { white-space: nowrap; padding: 5px 8px; font-weight: 600; font-size: 11px; border-radius: 3px; background: transparent; color: #fff; border: 1px solid rgba(255,255,255,.7); }
+  .ss .btns span.run { background: #fff; color: #0B5CAD; border-color: #fff; }
+  .ss .btns span.pin-n { padding: 0; border: 0; border-radius: 50%; background: #FFB020; color: #3B2600; font: 700 13px/24px var(--g-font); }
+
+  /* chrome://extensions */
+  .xp { background: #fff; border-radius: 10px; border: 1px solid var(--g-line-2); }
+  .xp-top { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-bottom: 1px solid var(--g-line-2); font-size: 13px; font-weight: 700; white-space: nowrap; gap: 10px; }
+  .dev { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 500; color: var(--g-text-2); padding: 3px 6px; }
+  .xp-row { display: flex; gap: 8px; padding: 12px; }
+  .gbtn { white-space: nowrap; border: 1px solid #C7D3EA; color: #1A56DB; background: #fff; border-radius: 6px; padding: 6px 10px; font-size: 12px; font-weight: 600; }
+  .xp-dlg { display: flex; align-items: center; gap: 8px; margin: 0 12px 12px; padding: 8px; border-radius: 8px; background: #F4F7FC; font-size: 12px; }
+  .xp-dlg .field { flex: 1; min-width: 0; border: 1px solid #C7D3EA; background: #fff; border-radius: 4px; padding: 5px 8px; color: var(--g-text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .xp-dlg .ok { white-space: nowrap; background: #1A56DB; color: #fff; border-radius: 4px; padding: 6px 10px; font-weight: 600; }
+  .kbd { display: inline-block; padding: 1px 7px; border-radius: 5px; background: #fff; border: 1px solid #C7D3EA; border-bottom-width: 2px; font: 600 13px/20px var(--g-font); color: var(--g-text); }
+
+  /* тулбар с пазлом */
+  .tb { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: #fff; border-radius: 10px; border: 1px solid var(--g-line-2); }
+  .tb .addr { flex: 1; height: 26px; border-radius: 13px; background: #EEF2F8; }
+  .tb .ic { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; color: var(--g-text-2); }
+  .tb .ic img { width: 20px; height: 20px; }
+  .menu { align-self: flex-end; width: 220px; margin-top: 10px; background: #fff; border-radius: 10px; box-shadow: 0 8px 24px rgba(15,23,38,.14); padding: 8px; }
+  .menu .t { font-size: 12px; color: var(--g-text-3); padding: 2px 6px 6px; }
+  .menu .it { display: flex; align-items: center; gap: 10px; padding: 7px 6px; border-radius: 6px; background: #F2F6FF; font-size: 14px; font-weight: 600; }
+  .menu .it img { width: 20px; height: 20px; }
+  .menu .it .pin { margin-left: auto; width: 26px; height: 26px; display: grid; place-items: center; color: #1A56DB; }
+
+  /* как скачать */
+  .how { display: grid; grid-template-columns: 440px 1fr; gap: 40px; align-items: start; }
+  .shot { position: relative; width: 380px; height: 600px; margin-left: 30px; border-radius: 16px; overflow: hidden; box-shadow: 0 24px 60px rgba(30,60,140,.25), 0 0 0 1px rgba(15,23,38,.06); }
+  .shot img { width: 380px; height: 600px; display: block; }
+  .shot-wrap { position: relative; }
+  .mark { position: absolute; width: 34px; height: 34px; border-radius: 50%; background: #FFB020; color: #3B2600; font: 700 17px/34px var(--g-font); text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,.18); border: 3px solid #fff; z-index: 2; }
+  .list { display: flex; flex-direction: column; gap: 14px; padding-top: 6px; }
+  .li { display: flex; gap: 16px; align-items: flex-start; padding: 18px 20px; border-radius: 16px; }
+  .li .mk { flex: 0 0 34px; height: 34px; border-radius: 50%; background: #FFB020; color: #3B2600; font: 700 17px/34px var(--g-font); text-align: center; }
+  .li h3 { margin: 0 0 3px; font-size: 18px; line-height: 24px; font-weight: 700; }
+  .li p { margin: 0; color: var(--g-text-2); font-size: 15px; line-height: 22px; }
+  .chipline { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+  .chipline span { padding: 4px 10px; border-radius: 8px; background: #fff; border: 1px solid var(--g-control-border); font-size: 13px; font-weight: 500; }
+  .chipline span.on { border-color: var(--g-select); background: var(--g-select-bg); color: var(--g-select-text); font-weight: 600; }
+
+  /* советы */
+  .tips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  .tip { border-radius: 16px; padding: 18px 20px; display: flex; gap: 14px; }
+  .tip .ti { flex: 0 0 40px; height: 40px; border-radius: 12px; background: var(--g-select-bg); color: var(--g-accent); display: grid; place-items: center; }
+  .tip h4 { margin: 0 0 4px; font-size: 16px; line-height: 22px; font-weight: 700; }
+  .tip p { margin: 0; font-size: 14px; line-height: 20px; color: var(--g-text-2); }
+  .foot { text-align: center; color: var(--g-text-3); font-size: 14px; margin-top: -12px; }
+
+  /* настоящие снимки браузера */
+  .shotbox { position: relative; }
+  .shotbox img { display: block; width: 100%; border-radius: 12px; border: 1px solid rgba(15,23,38,.10); box-shadow: 0 12px 32px rgba(30,60,140,.14); }
+  .ring { position: absolute; border: 3px solid #FFB020; border-radius: 12px; box-shadow: 0 0 0 5px rgba(255,176,32,.28); }
+  .ring > .pin-n { top: -15px; right: -15px; }
+  .card .ill { height: auto; margin: 0; padding: 0; background: none; border: 0; }
+  .card .ill .ss { max-width: 470px; margin-left: auto; margin-right: auto; padding: 22px 24px 20px; font-size: 14px; line-height: 20px; }
+  .card .ill .ss b { font-size: 19px; line-height: 25px; }
+  .card .ill .ss .btns span { font-size: 13px; padding: 7px 14px; }
+  .steps-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .steps-list li { display: flex; gap: 10px; align-items: flex-start; color: var(--g-text-2); font-size: 15px; line-height: 22px; margin: 0; }
+  .steps-list .pin-n { position: static; flex: 0 0 24px; margin-top: -1px; }
+
+  /* все кружки с цифрами: цифра ровно по центру */
+  .num, .pin-n, .mark, .li .mk, .ss .btns span.pin-n {
+    display: grid !important; place-items: center; padding: 0 !important; text-align: center;
+    line-height: 1 !important; font-feature-settings: "tnum" 1, "lnum" 1;
+  }
+  .mark { border: 0 !important; box-shadow: 0 0 0 3px #fff, 0 4px 12px rgba(0,0,0,.18) !important; }
+  .ss .lbl { font-style: normal; }
+</style>
+</head>
+<body class="r">
+<div class="wrap">
+
+  <header class="hero">
+    <img src="../../extension/assets/icons/icon-512-store.png" alt="">
+    <div>
+      <h1>Grabber <small data-t="part_title"></small></h1>
+      <p data-t="tagline"></p>
+      <div class="tags">
+        <span class="tag" data-t="tag1"></span>
+        <span class="tag">MP3 · WAV · FLAC</span>
+        <span class="tag" data-t="tag3"></span>
+        <span class="tag" data-t="tag4"></span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Часть 1: установка -->
+  <section data-part="1">
+    <div class="sec-h"><h2 data-t="install_h"></h2><span data-t="install_sub"></span></div>
+    <div class="steps">
+
+      <div class="card g-glass">
+        <div class="txt">
+          <div class="head"><div class="num">1</div><h3 data-t="s1_h"></h3></div>
+          <p data-th="s1_p1"></p>
+          <p data-th="s1_p2"></p>
+        </div>
+        <div class="ill">
+          <div class="ss">
+            <b data-t="ss_title"></b>
+            <span data-t="ss_text"></span><br>
+            <span class="more hl"><span data-t="ss_more"></span><span class="pin-n">1</span></span>
+            <div class="btns"><span class="run hl"><em class="lbl" data-t="ss_run"></em><span class="pin-n">2</span></span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card g-glass">
+        <div class="txt">
+          <div class="head"><div class="num">2</div><h3 data-t="s2_h"></h3></div>
+          <p data-th="s2_p"></p>
+          <ol class="steps-list">
+            <li><span class="pin-n">1</span><span data-th="s2_1"></span></li>
+            <li><span class="pin-n">2</span><span data-th="s2_2"></span></li>
+            <li><span class="pin-n">3</span><span data-t="s2_3"></span></li>
+          </ol>
+        </div>
+        <div class="shotbox">
+          <img data-src="real/extensions-{lang}.png" alt="">
+          <div class="ring" data-ring="dev"><span class="pin-n">1</span></div>
+          <div class="ring" data-ring="load"><span class="pin-n">2</span></div>
+          <div class="ring" data-ring="card"><span class="pin-n">3</span></div>
+        </div>
+      </div>
+
+      <div class="card g-glass">
+        <div class="txt">
+          <div class="head"><div class="num">3</div><h3 data-t="s3_h"></h3></div>
+          <ol class="steps-list">
+            <li><span class="pin-n">1</span><span data-t="s3_1"></span></li>
+            <li><span class="pin-n">2</span><span data-t="s3_2"></span></li>
+          </ol>
+        </div>
+        <div class="shotbox">
+          <img data-src="real/toolbar-menu-{lang}.png" alt="">
+          <div class="ring" data-ring="puzzle" style="border-radius:50%"><span class="pin-n">1</span></div>
+          <div class="ring" data-ring="pin"><span class="pin-n">2</span></div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Часть 2: как скачать -->
+  <section data-part="2">
+    <div class="sec-h"><h2 data-t="how_h"></h2><span data-t="how_sub"></span></div>
+    <div class="how">
+      <div class="shot-wrap">
+        <div class="shot"><img data-src="popup-{lang}.png" alt=""></div>
+        <div class="mark" style="left:8px;top:184px">2</div>
+        <div class="mark" style="left:8px;top:258px">3</div>
+        <div class="mark" style="left:8px;top:380px">4</div>
+        <div class="mark" style="left:8px;top:556px">5</div>
+      </div>
+      <div class="list">
+        <div class="li g-glass"><div class="mk">1</div><div><h3 data-t="h1_h"></h3><p data-t="h1_p"></p></div></div>
+        <div class="li g-glass"><div class="mk">2</div><div><h3 data-t="h2_h"></h3><p data-t="h2_p"></p></div></div>
+        <div class="li g-glass"><div class="mk">3</div><div><h3 data-t="h3_h"></h3>
+          <div class="chipline"><span data-t="max"></span><span>2160p</span><span>1440p</span><span class="on">1080p</span><span>720p</span><span style="margin-left:10px">MP3 320</span><span>WAV</span></div>
+          <p style="margin-top:10px" data-th="h3_p"></p></div></div>
+        <div class="li g-glass"><div class="mk">4</div><div><h3 data-t="h4_h"></h3><p data-t="h4_p"></p></div></div>
+        <div class="li g-glass"><div class="mk">5</div><div><h3 data-t="h5_h"></h3><p data-th="h5_p"></p></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="tips" data-part="2">
+    <div class="tip g-glass">
+      <div class="ti"><svg width="20" height="20" viewBox="0 0 16 16"><path d="M6.5 9.5a3 3 0 0 0 4.2 0l2.1-2.1a3 3 0 0 0-4.2-4.2l-.8.8M9.5 6.5a3 3 0 0 0-4.2 0L3.2 8.6a3 3 0 0 0 4.2 4.2l.8-.8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+      <div><h4 data-t="t1_h"></h4><p data-t="t1_p"></p></div>
+    </div>
+    <div class="tip g-glass">
+      <div class="ti"><svg width="20" height="20" viewBox="0 0 16 16"><path d="M13 8a5 5 0 1 1-1.5-3.6M13 2.5v3h-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div><h4 data-t="t2_h"></h4><p data-t="t2_p"></p></div>
+    </div>
+    <div class="tip g-glass">
+      <div class="ti"><svg width="20" height="20" viewBox="0 0 16 16"><path d="M8 2 14.5 13.5h-13z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M8 6.5v3.2M8 11.6v.1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></div>
+      <div><h4 data-t="t3_h"></h4><p data-t="t3_p"></p></div>
+    </div>
+  </section>
+
+  <div class="foot">Grabber by beyond</div>
+</div>
+
+<script src="real/rings.js"></script>
+<script>
+// ?part=1|2&lang=ru|en — one layout, four images (render.ps1).
+const Q = new URLSearchParams(location.search);
+const PART = Q.get('part') || '1';
+const LANG = Q.get('lang') === 'en' ? 'en' : 'ru';
+const kbd = (k) => `<span class="kbd">${k}</span>`;
+const TXT = {
+  ru: {
+    part_title: { 1: 'установка', 2: 'как скачать' },
+    tagline: 'Скачивайте видео и музыку с YouTube, SoundCloud, VK и ещё 1000+ сайтов в два клика.',
+    tag1: 'Видео до 4K', tag3: 'H.264 для монтажа', tag4: 'Бесплатно и без рекламы',
+    install_h: 'Установка', install_sub: 'один раз, около 3 минут',
+    s1_h: 'Запустите установщик',
+    s1_p1: 'Откройте <b style="white-space:nowrap">Grabber-Setup.exe</b> и нажимайте «Далее». Всё нужное скачается само.',
+    s1_p2: 'Появилось синее окно? Это обычное предупреждение для новых программ. Нажмите <b>«Подробнее»</b>, затем <b>«Выполнить в любом случае»</b>.',
+    ss_title: 'Система Windows защитила ваш компьютер', ss_text: 'Фильтр SmartScreen предотвратил запуск неопознанного приложения.',
+    ss_more: 'Подробнее', ss_run: 'Выполнить в любом случае',
+    s2_h: 'Подключите расширение',
+    s2_p: 'Откройте меню браузера <b>⋮</b> → <b>Расширения</b> → <b>Управление расширениями</b>.',
+    s2_1: 'Включите <b>«Режим разработчика»</b>',
+    s2_2: `Нажмите <b>«Загрузить распакованное расширение»</b>, вставьте путь ${kbd('Ctrl')} + ${kbd('V')} (он уже скопирован) и нажмите <b>«Выбор папки»</b>`,
+    s2_3: 'Grabber появится в списке',
+    s3_h: 'Перезапустите браузер и закрепите значок',
+    s3_1: 'Нажмите на значок пазла справа от адресной строки',
+    s3_2: 'Нажмите на булавку рядом с Grabber, и его значок всегда будет на панели',
+    how_h: 'Как скачать', how_sub: 'каждый раз, в два клика',
+    h1_h: 'Откройте видео или трек', h1_p: 'YouTube, SoundCloud, VK, TikTok, Twitch, Vimeo и почти любой другой сайт.',
+    h2_h: 'Нажмите значок Grabber и выберите «Видео» или «Звук»', h2_p: 'Название и превью появятся сами.',
+    h3_h: 'Выберите качество или формат', max: 'Макс.',
+    h3_p: 'Для монтажа оставьте <b>H.264</b> включённым: получится MP4, который открывается везде. Нужно 4K — выключите H.264.',
+    h4_h: 'Нажмите «Скачать»', h4_p: 'Прогресс видно внизу окна. Можно закрыть его, загрузка продолжится.',
+    h5_h: 'Заберите файл', h5_p: 'Файлы лежат в папке <span class="mono" style="font-size:14px">Grabber\\downloads</span>. Сменить её можно кнопкой «Изменить».',
+    t1_h: 'Скачать по ссылке', t1_p: 'Правый клик по ссылке → «Скачать через Grabber».',
+    t2_h: 'Перестало качать?', t2_p: 'Перезапустите браузер: Grabber сам подтянет свежую версию загрузчика.',
+    t3_h: '«Помощник не установлен»', t3_p: 'Запустите Grabber-Setup.exe ещё раз и перезапустите браузер.',
+  },
+  en: {
+    part_title: { 1: 'installation', 2: 'how to download' },
+    tagline: 'Download video and music from YouTube, SoundCloud, VK and 1000+ other sites in two clicks.',
+    tag1: 'Video up to 4K', tag3: 'H.264 for editing', tag4: 'Free, no ads',
+    install_h: 'Installation', install_sub: 'once, about 3 minutes',
+    s1_h: 'Run the installer',
+    s1_p1: 'Open <b style="white-space:nowrap">Grabber-Setup.exe</b> and click “Next”. Everything it needs downloads by itself.',
+    s1_p2: 'A blue window popped up? That’s a normal warning for new apps. Click <b>“More info”</b>, then <b>“Run anyway”</b>.',
+    ss_title: 'Windows protected your PC', ss_text: 'Microsoft Defender SmartScreen prevented an unrecognized app from starting.',
+    ss_more: 'More info', ss_run: 'Run anyway',
+    s2_h: 'Connect the extension',
+    s2_p: 'Open the browser menu <b>⋮</b> → <b>Extensions</b> → <b>Manage Extensions</b>.',
+    s2_1: 'Turn on <b>“Developer mode”</b>',
+    s2_2: `Click <b>“Load unpacked”</b>, paste the path with ${kbd('Ctrl')} + ${kbd('V')} (it’s already copied) and click <b>“Select Folder”</b>`,
+    s2_3: 'Grabber shows up in the list',
+    s3_h: 'Restart the browser and pin the icon',
+    s3_1: 'Click the puzzle icon to the right of the address bar',
+    s3_2: 'Click the pin next to Grabber, and its icon stays on the toolbar',
+    how_h: 'How to download', how_sub: 'every time, in two clicks',
+    h1_h: 'Open a video or a track', h1_p: 'YouTube, SoundCloud, VK, TikTok, Twitch, Vimeo and almost any other site.',
+    h2_h: 'Click the Grabber icon and pick “Video” or “Audio”', h2_p: 'The title and preview appear by themselves.',
+    h3_h: 'Choose the quality or format', max: 'Max',
+    h3_p: 'For editing keep <b>H.264</b> on: you get an MP4 that opens anywhere. Need 4K — turn H.264 off.',
+    h4_h: 'Click “Download”', h4_p: 'Progress shows at the bottom. You can close the window — the download keeps going.',
+    h5_h: 'Grab the file', h5_p: 'Files go to <span class="mono" style="font-size:14px">Grabber\\downloads</span>. Change it with the “Change” button.',
+    t1_h: 'Download a link', t1_p: 'Right-click a link → “Download with Grabber”.',
+    t2_h: 'Stopped downloading?', t2_p: 'Restart the browser: Grabber pulls the latest downloader version by itself.',
+    t3_h: '“Helper is not installed”', t3_p: 'Run Grabber-Setup.exe again and restart the browser.',
+  },
+};
+const D = TXT[LANG];
+document.documentElement.lang = LANG;
+document.querySelectorAll('[data-t]').forEach((el) => {
+  const v = D[el.dataset.t];
+  el.textContent = typeof v === 'object' ? v[PART] : v;
+});
+document.querySelectorAll('[data-th]').forEach((el) => { el.innerHTML = D[el.dataset.th]; });
+document.querySelectorAll('[data-src]').forEach((el) => { el.src = el.dataset.src.replace('{lang}', LANG); });
+document.querySelectorAll('[data-ring]').forEach((el) => {
+  const r = window.RINGS[LANG][el.dataset.ring];
+  Object.assign(el.style, { left: r.left + '%', top: r.top + '%', width: r.width + '%', height: r.height + '%' });
+});
+document.querySelectorAll('[data-part]').forEach((el) => { el.hidden = el.dataset.part !== PART; });
+</script>
+</body>
+</html>

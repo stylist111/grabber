@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Grabber</title>
+<style>
+  @font-face { font-family: "Inter"; font-weight: 400; src: url("assets/fonts/Inter-Regular.woff") format("woff"); }
+  @font-face { font-family: "Inter"; font-weight: 600; src: url("assets/fonts/Inter-SemiBold.woff") format("woff"); }
+  body { margin: 0; background: #EEF3FF; color: #0F1726; font: 15px/1.6 Inter, "Segoe UI", sans-serif; }
+  main { max-width: 640px; margin: 48px auto; padding: 32px 36px; background: rgba(255,255,255,.8); border-radius: 16px; box-shadow: 0 8px 32px rgba(15,23,38,.08); }
+  h1 { display: flex; align-items: center; gap: 12px; font-size: 22px; margin: 0 0 8px; }
+  h2 { font-size: 16px; margin: 28px 0 8px; }
+  p, li { color: #4C5767; }
+  ol { padding-left: 22px; }
+  li { margin: 6px 0; }
+  a { color: #1A56DB; }
+  code { font-family: "Cascadia Mono", Consolas, monospace; background: #EAF2FF; color: #1046C7; padding: 1px 6px; border-radius: 5px; font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <h1><img src="assets/icons/icon-64.png" width="36" height="36" alt=""><span data-i18n="help_title"></span></h1>
+  <p data-i18n="help_intro"></p>
+  <h2 data-i18n="help_where_h"></h2>
+  <p data-i18n-html="help_where_p"></p>
+  <h2 data-i18n="help_install_h"></h2>
+  <ol>
+    <li data-i18n-html="help_s1"></li>
+    <li data-i18n-html="help_s2"></li>
+    <li data-i18n="help_s3"></li>
+    <li data-i18n="help_s4"></li>
+  </ol>
+</main>
+<script src="i18n.js"></script>
+<script src="help.js"></script>
+</body>
+</html>

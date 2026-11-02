@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Grabber — banner</title>
+<link rel="stylesheet" href="../../extension/popup/popup.css">
+<style>
+  body { margin: 0; }
+  /* 1280×640 — GitHub social preview size; also the README header */
+  .wrap {
+    width: 1280px; height: 640px; box-sizing: border-box; position: relative; overflow: hidden;
+    display: grid; grid-template-columns: 1fr 430px; align-items: center; gap: 40px; padding: 0 80px 0 88px;
+    font: 400 16px/24px var(--g-font); color: var(--g-text); -webkit-font-smoothing: antialiased;
+    background:
+      radial-gradient(45% 55% at 0% 0%, #8DB8FF 0%, rgba(141,184,255,0) 100%),
+      radial-gradient(40% 50% at 100% 10%, #B3CEFF 0%, rgba(179,206,255,0) 100%),
+      radial-gradient(55% 60% at 90% 100%, #94BCFF 0%, rgba(148,188,255,0) 100%),
+      radial-gradient(40% 50% at 10% 100%, #CFE0FF 0%, rgba(207,224,255,0) 100%),
+      var(--g-bg);
+  }
+  .brand { display: flex; align-items: center; gap: 22px; }
+  .brand img { width: 112px; height: 112px; }
+  .brand h1 { margin: 0; font-size: 76px; line-height: 80px; font-weight: 700; letter-spacing: -0.04em; }
+  .brand small { display: block; font-size: 20px; line-height: 24px; font-weight: 500; color: var(--g-text-3); letter-spacing: 0; margin-top: 4px; }
+  .tagline { margin: 30px 0 0; font-size: 28px; line-height: 38px; font-weight: 600; letter-spacing: -0.015em; color: var(--g-text); max-width: 620px; }
+  .sub { margin: 12px 0 0; font-size: 19px; line-height: 28px; color: var(--g-text-2); max-width: 600px; }
+  .tags { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 28px; }
+  .tag { padding: 7px 14px; border-radius: 99px; background: rgba(255,255,255,.72); border: 1px solid var(--g-glass-border); font-size: 15px; font-weight: 500; color: var(--g-text-2); }
+  .shot { width: 380px; height: 600px; border-radius: 18px; overflow: hidden; justify-self: end;
+          box-shadow: 0 30px 70px rgba(30,60,140,.30), 0 0 0 1px rgba(15,23,38,.06); }
+  .shot img { width: 380px; height: 600px; display: block; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div>
+    <div class="brand">
+      <img src="../../extension/assets/icons/icon-512-store.png" alt="">
+      <h1>Grabber<small>by beyond</small></h1>
+    </div>
+    <p class="tagline" data-t="tagline"></p>
+    <p class="sub" data-t="sub"></p>
+    <div class="tags">
+      <span class="tag" data-t="t1"></span><span class="tag">MP3 · WAV · FLAC</span>
+      <span class="tag" data-t="t2"></span><span class="tag" data-t="t3"></span>
+    </div>
+  </div>
+  <div class="shot"><img id="shot" alt=""></div>
+</div>
+<script>
+const LANG = new URLSearchParams(location.search).get('lang') === 'ru' ? 'ru' : 'en';
+const T = {
+  en: { tagline: 'Download video and audio from YouTube, SoundCloud and 1000+ sites in two clicks.',
+        sub: 'A browser extension for Chrome, Edge, Brave and Yandex. Runs locally on yt-dlp + ffmpeg.',
+        t1: 'Video up to 4K', t2: 'H.264 for editing', t3: 'Free & open source' },
+  ru: { tagline: 'Скачивайте видео и звук с YouTube, SoundCloud и 1000+ сайтов в два клика.',
+        sub: 'Расширение для Chrome, Edge, Brave и Яндекса. Работает локально на yt-dlp + ffmpeg.',
+        t1: 'Видео до 4K', t2: 'H.264 для монтажа', t3: 'Бесплатно и open source' },
+}[LANG];
+document.documentElement.lang = LANG;
+document.querySelectorAll('[data-t]').forEach((el) => { el.textContent = T[el.dataset.t]; });
+document.getElementById('shot').src = `popup-${LANG}.png`;
+</script>
+</body>
+</html>
