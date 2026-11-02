@@ -2,79 +2,64 @@
 
 # Grabber
 
-Расширение для браузера, которое скачивает видео и звук с YouTube, SoundCloud, VK, TikTok, Twitch, Vimeo и [ещё 1000+ сайтов](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md) в два клика. Открыли страницу, нажали значок, выбрали качество — готово.
+Скачивает видео и звук с YouTube, SoundCloud, VK, TikTok, Twitch и [ещё 1000+ сайтов](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md) в два клика: открыли страницу → нажали значок → выбрали качество.
 
-- **Видео до 4K** или **MP4 в H.264 + AAC**, который открывается в любом плеере и монтажке
-- **Звук**: MP3 320, M4A, WAV, FLAC, Opus — с обложкой и тегами
-- Правый клик по любой ссылке → **Скачать через Grabber**
-- Выбор папки, прогресс, отмена и повтор загрузки
-- **Всё работает на вашем компьютере.** Без серверов посередине, аккаунтов, рекламы и слежки
-- Загрузчик ([yt-dlp](https://github.com/yt-dlp/yt-dlp)) обновляется сам, поэтому сайты продолжают качаться
+## ✨ Что умеет
 
-Работает на **Windows 10/11** в **Chrome, Edge, Brave и Яндекс.Браузере**.
+- 🎬 Видео до **4K** или **MP4 (H.264 + AAC)** — открывается в любом плеере и монтажке
+- 🎵 Звук: **MP3 320, M4A, WAV, FLAC, Opus** — с обложкой и тегами
+- 🖱️ Правый клик по ссылке → **Скачать через Grabber**
+- 🔒 Всё работает на вашем компьютере: без серверов, аккаунтов и рекламы
+- 🔄 Загрузчик обновляется сам — сайты продолжают качаться
 
-## Установка
+💻 **Windows 10/11** · Chrome, Edge, Brave, Яндекс.Браузер
 
-1. Скачайте **`Grabber-Setup.exe`** со страницы [Releases](https://github.com/stylist111/grabber/releases/latest) и запустите.
-   Windows может показать синее окно *«Система Windows защитила ваш компьютер»* — у установщика нет платной цифровой подписи. Нажмите **Подробнее → Выполнить в любом случае**.
-2. Откройте меню браузера **⋮ → Расширения → Управление расширениями**, включите **Режим разработчика**, нажмите **Загрузить распакованное расширение**, вставьте путь **Ctrl+V** (установщик уже скопировал его) и нажмите **Выбор папки**.
-3. Перезапустите браузер и закрепите значок Grabber (значок пазла → булавка).
+## 📥 Установка
 
-Инструкция в картинках: [установка](docs/guide/ru/Grabber%20—%201.%20Установка.png) · [как скачать](docs/guide/ru/Grabber%20—%202.%20Как%20скачать.png)
+1. Скачайте **`Grabber-Setup.exe`** из [Releases](https://github.com/stylist111/grabber/releases/latest) и запустите.
+   Если Windows покажет синее окно — **Подробнее → Выполнить в любом случае**.
+2. В браузере: **⋮ → Расширения → Управление расширениями** → включите **Режим разработчика** →
+   **Загрузить распакованное расширение** → **Ctrl+V** (путь уже скопирован) → **Выбор папки**.
+3. Перезапустите браузер и закрепите значок Grabber (пазл → булавка).
 
-> **Почему через «Режим разработчика», а не из Chrome Web Store?** Магазин не пропускает расширения, которые скачивают с YouTube. Загрузка распакованного расширения — штатная функция Chrome, и загружается ровно тот код, что лежит в этом репозитории.
+📖 В картинках: [установка](docs/guide/ru/Grabber%20—%201.%20Установка.png) · [как скачать](docs/guide/ru/Grabber%20—%202.%20Как%20скачать.png)
 
-## Как это устроено
+> 💡 **Почему не из Chrome Web Store?** Магазин не пропускает расширения, которые скачивают с YouTube. Режим разработчика — обычная функция браузера, и загружается ровно тот код, что лежит здесь.
+
+## ⚙️ Как устроено
 
 ```
-расширение (окно, кнопки)  ──native messaging──▶  grabber_host.exe  ──▶  yt-dlp + ffmpeg  ──▶  ваша папка
+расширение  ──▶  grabber_host.exe  ──▶  yt-dlp + ffmpeg  ──▶  ваша папка
 ```
 
-Само по себе расширение скачивать с YouTube не умеет, поэтому у Grabber две части:
+- **`extension/`** — само расширение: окно, загрузки, настройки.
+- **`src/host.py`** — маленький помощник на компьютере. Браузер запускает его сам, а он вызывает [yt-dlp](https://github.com/yt-dlp/yt-dlp) и [ffmpeg](https://ffmpeg.org).
 
-- **`extension/`** — расширение Chrome (Manifest V3): окно, список загрузок, настройки.
-- **`src/host.py`** — небольшой локальный помощник, собранный в `grabber_host.exe`. Браузер запускает его через [native messaging](https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging), а он вызывает официальные сборки [yt-dlp](https://github.com/yt-dlp/yt-dlp) и [ffmpeg](https://ffmpeg.org). Общаться с ним может только расширение с ID этого проекта.
+Установщик скачивает нужные программы с их официальных страниц, дальше yt-dlp обновляется сам.
 
-Установщик скачивает yt-dlp, ffmpeg и [deno](https://deno.com) (нужен для YouTube) с их официальных страниц на GitHub. Дальше yt-dlp обновляется сам при каждом запуске браузера и раз в 3 часа.
+## 🛡️ Безопасность
 
-## Безопасность
-
-- **Сборки делаются из этого репозитория.** Каждый релиз собирает [GitHub Actions](.github/workflows/release.yml) из исходников с тегом, с контрольной суммой SHA-256 и подписанным [подтверждением происхождения сборки](https://docs.github.com/ru/actions/security-for-github-actions/using-artifact-attestations). Проверить, что ваш `Grabber-Setup.exe` настоящий:
+- Каждый релиз собирается [здесь же на GitHub](.github/workflows/release.yml) из открытого кода — с контрольной суммой и [подтверждением происхождения](https://docs.github.com/ru/actions/security-for-github-actions/using-artifact-attestations). Проверить файл:
   ```powershell
   gh attestation verify Grabber-Setup.exe --repo stylist111/grabber
-  Get-FileHash Grabber-Setup.exe   # сравните с SHA256SUMS.txt в релизе
   ```
-- **Скачивайте только со страницы [Releases](https://github.com/stylist111/grabber/releases)** этого репозитория. Копии из других мест могут быть изменены.
-- Помощник принимает только обычные ссылки `http(s)` и передаёт их в yt-dlp как данные (никогда как параметры), не открывает сетевых портов и ничего не хранит, кроме локального лога.
-- Нашли уязвимость? См. [SECURITY.md](SECURITY.md).
+- Скачивайте **только из [Releases](https://github.com/stylist111/grabber/releases)** этого репозитория.
+- Помощник не открывает сетевых портов и ничего не хранит, кроме локального лога.
+- Нашли уязвимость? → [SECURITY.md](SECURITY.md)
 
-## Сборка из исходников
+## 🛠️ Сборка
 
-Нужно: Windows, Python 3.11+, Node.js (для картинок инструкции), Google Chrome, [Inno Setup 6](https://jrsoftware.org/isinfo.php).
+Нужно: Windows, Python 3.11+, Node.js, Google Chrome, [Inno Setup 6](https://jrsoftware.org/isinfo.php).
 
 ```powershell
 python -m pip install pyinstaller pillow numpy
-powershell -ExecutionPolicy Bypass -File src\build.ps1              # → dist\Grabber-Setup.exe
-powershell -ExecutionPolicy Bypass -File src\build.ps1 -SkipRender  # не перерисовывать картинки в docs\
+powershell -ExecutionPolicy Bypass -File src\build.ps1   # → dist\Grabber-Setup.exe
 ```
 
-| Путь | Что внутри |
-|---|---|
-| `extension/` | расширение (окно в `popup/`, тексты интерфейса в `i18n.js`) |
-| `src/host.py` | помощник: установка, регистрация в браузерах, загрузки, автообновление yt-dlp |
-| `src/setup.iss` | установщик Inno Setup |
-| `src/guide.html` | страница с инструкцией, которую открывает установщик |
-| `src/readme/` | исходники картинок инструкции и обложек из `docs/` |
-| `.github/workflows/release.yml` | сборка релизов |
+## 🙏 Благодарности
 
-## Правовое
+<a href="https://github.com/yt-dlp/yt-dlp"><img src="docs/yt-dlp.svg" alt="yt-dlp" height="60"></a>
 
-Grabber — это инструмент. Скачивайте только то, на что у вас есть право, и соблюдайте правила сайтов и авторские права. Авторы не несут ответственности за использование.
+## 📄 Лицензия
 
-## Благодарности
-
-[yt-dlp](https://github.com/yt-dlp/yt-dlp) (Unlicense) · [FFmpeg](https://ffmpeg.org) (GPL, скачивается при установке, не входит в сборку) · [Deno](https://deno.com) (MIT) · шрифты [Inter](https://rsms.me/inter/) и [JetBrains Mono](https://www.jetbrains.com/lp/mono/) (SIL OFL 1.1)
-
-## Лицензия
-
-[MIT](LICENSE) © beyond
+MIT

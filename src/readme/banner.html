@@ -42,7 +42,7 @@
     <p class="sub" data-t="sub"></p>
     <div class="tags">
       <span class="tag" data-t="t1"></span><span class="tag">MP3 · WAV · FLAC</span>
-      <span class="tag" data-t="t2"></span><span class="tag" data-t="t3"></span>
+      <span class="tag" data-t="t2"></span>
     </div>
   </div>
   <div class="shot"><img id="shot" alt=""></div>
@@ -52,10 +52,10 @@ const LANG = new URLSearchParams(location.search).get('lang') === 'ru' ? 'ru' : 
 const T = {
   en: { tagline: 'Download video and audio from YouTube, SoundCloud and 1000+ sites in two clicks.',
         sub: 'A browser extension for Chrome, Edge, Brave and Yandex. Runs locally on yt-dlp + ffmpeg.',
-        t1: 'Video up to 4K', t2: 'H.264 for editing', t3: 'Free & open source' },
+        t1: 'Video up to 4K', t2: 'H.264 for editing' },
   ru: { tagline: 'Скачивайте видео и звук с YouTube, SoundCloud и 1000+ сайтов в два клика.',
         sub: 'Расширение для Chrome, Edge, Brave и Яндекса. Работает локально на yt-dlp + ffmpeg.',
-        t1: 'Видео до 4K', t2: 'H.264 для монтажа', t3: 'Бесплатно и open source' },
+        t1: 'Видео до 4K', t2: 'H.264 для монтажа' },
 }[LANG];
 document.documentElement.lang = LANG;
 document.querySelectorAll('[data-t]').forEach((el) => { el.textContent = T[el.dataset.t]; });
