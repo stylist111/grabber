@@ -41,12 +41,19 @@
   let url = targetUrl;
   let media = null;
 
+  // Only these two Chrome errors mean "not installed". "Failed to start…", "Error when communicating…"
+  // and "Native host has exited." are hiccups (e.g. the installer is swapping files), and a site's
+  // "404 Not Found" from yt-dlp has nothing to do with the helper.
   function hostMissing(err) {
-    return /native messaging host|not found|Specified native|forbidden/i.test(err || '');
+    return /Specified native messaging host not found|native messaging host is forbidden/i.test(err || '');
   }
 
   async function checkHelper() {
-    const r = await send({ cmd: 'ping' });
+    let r;
+    for (let i = 0; i < 3 && !r?.ok; i++) {
+      if (i) await new Promise((ok) => setTimeout(ok, 700));
+      r = await send({ cmd: 'ping' });
+    }
     if (!r?.ok) {
       if (hostMissing(r?.error)) UI.showHelperMissing();
       else UI.showError({ kind: 'other', title: T('err_helper_title'), code: r?.error || '', site: { name: hostOf(url), url } });

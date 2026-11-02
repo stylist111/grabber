@@ -158,12 +158,13 @@ async function createMenu() {
 chrome.runtime.onInstalled.addListener(createMenu);
 
 // New Grabber release? Ask GitHub at most every 6 hours (one anonymous request to the public API);
-// the popup shows a banner when the latest release is newer than this extension.
+// the popup shows a banner when the latest release is a bigger version (1.0 → 1.1 or 2.0). Bug-fix
+// releases (1.0.0 → 1.0.1) ship quietly: the banner is for things worth reinstalling for.
 const UPDATE_EVERY = 6 * 3600 * 1000;
 
-function isNewer(a, b) {
+function isNewer(a, b, parts = 3) {
   const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
-  for (let i = 0; i < 3; i++) if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) > (pb[i] || 0);
+  for (let i = 0; i < parts; i++) if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) > (pb[i] || 0);
   return false;
 }
 
@@ -176,7 +177,7 @@ async function checkUpdate(force) {
     const rel = await r.json();
     const version = String(rel.tag_name || '').replace(/^v/, '');
     const setup = (rel.assets || []).find((a) => /Setup\.exe$/i.test(a.name));
-    const update = isNewer(version, chrome.runtime.getManifest().version)
+    const update = isNewer(version, chrome.runtime.getManifest().version, 2)
       ? { version, url: setup ? setup.browser_download_url : rel.html_url } : null;
     await chrome.storage.local.set({ updateCheckedAt: Date.now(), update });
   } catch { /* offline — try again next time */ }
