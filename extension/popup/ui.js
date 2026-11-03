@@ -43,6 +43,10 @@
     private: { icon: 'lock', key: 'err_private', retry: true },
     age: { icon: '18+', key: 'err_age', retry: true },
     region: { icon: 'globe', key: 'err_region', retry: false },
+    notfound: { icon: 'search', key: 'err_notfound', retry: true },
+    login: { icon: 'lock', key: 'err_login', retry: true },
+    busy: { icon: 'alert', key: 'err_busy', retry: true },
+    network: { icon: 'globe', key: 'err_network', retry: true },
     other: { icon: 'alert', key: 'err_other', retry: true }
   };
 

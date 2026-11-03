@@ -125,6 +125,11 @@
     if (/private video|is private/i.test(m)) kind = 'private';
     else if (/confirm your age|age.restricted|inappropriate for some users|Sign in to confirm your age/i.test(m)) kind = 'age';
     else if (/not (made this video )?available in your country|geo.?restrict|not available in your (country|region)/i.test(m)) kind = 'region';
+    // A 404 almost always means the page itself isn't a video/track (a feed, library, profile tab).
+    else if (/HTTP Error 404|404: Not Found|does not exist|has been (removed|deleted)|no longer available/i.test(m)) kind = 'notfound';
+    else if (/HTTP Error 429|Too Many Requests|rate.?limit/i.test(m)) kind = 'busy';
+    else if (/HTTP Error 40[13]|Sign in|log ?in|cookies|members.only|requires? (authentication|subscription|premium)/i.test(m)) kind = 'login';
+    else if (/timed? ?out|getaddrinfo|Connection (reset|refused|aborted)|Network is unreachable|Unable to connect|SSL/i.test(m)) kind = 'network';
     return { kind, code: m, site: { name: hostOf(pageUrl), url: pageUrl } };
   }
 
