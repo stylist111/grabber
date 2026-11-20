@@ -64,15 +64,17 @@ if QUARANTINE:
     # What Chrome gets from LSFileQuarantineEnabled: the process (and its children) are marked, and
     # every file they create carries com.apple.quarantine. Private but stable libquarantine API.
     import ctypes
-    q = ctypes.CDLL('/usr/lib/system/libquarantine.dylib')
-    q.qtn_proc_alloc.restype = ctypes.c_void_p
-    q.qtn_proc_set_identifier.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
-    q.qtn_proc_set_flags.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
-    q.qtn_proc_apply_to_self.argtypes = [ctypes.c_void_p]
-    qp = q.qtn_proc_alloc()
-    q.qtn_proc_set_identifier(qp, b'GrabberSmokeTest')
-    q.qtn_proc_set_flags(qp, 0x0001)  # QTN_FLAG_DOWNLOAD
-    rc = q.qtn_proc_apply_to_self(qp)
+    lib = ctypes.CDLL('/usr/lib/system/libquarantine.dylib')
+    alloc, set_id, set_flags, apply = (getattr(lib, '_qtn_proc_' + n) for n in
+                                       ('alloc', 'set_identifier', 'set_flags', 'apply_to_self'))
+    alloc.restype = ctypes.c_void_p
+    set_id.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+    set_flags.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+    apply.argtypes = [ctypes.c_void_p]
+    qp = alloc()
+    set_id(qp, b'GrabberSmokeTest')
+    set_flags(qp, 0x0001)  # QTN_FLAG_DOWNLOAD
+    rc = apply(qp)
     probe = os.path.join(out, 'probe.txt')
     open(probe, 'w').close()
     if rc != 0 or not flagged(probe):

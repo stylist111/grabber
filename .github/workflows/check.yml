@@ -74,9 +74,27 @@ jobs:
       # helper re-download yt-dlp under it, the way its auto-update does.
       - name: Like under Chrome (quarantine) + yt-dlp update
         run: |
-          for l in /usr/lib/system/libquarantine.dylib /usr/lib/system/libsystem_kernel.dylib /usr/lib/libSystem.B.dylib; do echo "== $l"; dyld_info -exports "$l" 2>&1 | grep -i qtn | head -40; done
           rm -rf ~/Grabber/bin/yt-dlp_macos
           python3 src/smoke_test.py --quarantine --update-first ~/Grabber/app/grabber_host
+
+      - name: (info) the old one-file yt-dlp under the same emulation
+        continue-on-error: true
+        run: |
+          curl -fsSL -o /tmp/yt-dlp_onefile https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos
+          chmod +x /tmp/yt-dlp_onefile
+          python3 - <<'PY'
+          import ctypes, subprocess
+          lib = ctypes.CDLL('/usr/lib/system/libquarantine.dylib')
+          lib._qtn_proc_alloc.restype = ctypes.c_void_p
+          p = lib._qtn_proc_alloc()
+          lib._qtn_proc_set_flags.argtypes = [ctypes.c_void_p, ctypes.c_uint32]; lib._qtn_proc_set_flags(p, 1)
+          lib._qtn_proc_apply_to_self.argtypes = [ctypes.c_void_p]; print('apply', lib._qtn_proc_apply_to_self(p))
+          try:
+              r = subprocess.run(['/tmp/yt-dlp_onefile', '--version'], capture_output=True, text=True, timeout=60)
+              print('rc', r.returncode, r.stdout.strip(), r.stderr.strip()[-400:])
+          except subprocess.TimeoutExpired:
+              print('hung (waiting for a Gatekeeper prompt?)')
+          PY
 
       - name: Second run = update (keeps bin/, nothing re-downloaded)
         run: |
