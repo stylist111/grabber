@@ -130,13 +130,24 @@ check('audio mp3 (ffmpeg + cover)', ok, d)
 ok, d = download('v1', video_url, mode='video', height=360, h264=True)
 check('video 360p mp4' + (' (ffmpeg merge)' if video_url == url else ''), ok, d)
 
-send({'type': 'download', 'id': 'c1', 'dir': out, 'url': long_url, 'mode': 'video', 'height': 1080, 'h264': False})
-time.sleep(8)
+# Own folder (the video above may be the same file: "already downloaded" would finish at once),
+# and cancel as soon as bytes flow, before a fast runner finishes the whole file.
+cdir = os.path.join(out, 'cancel')
+send({'type': 'download', 'id': 'c1', 'dir': cdir, 'url': long_url, 'mode': 'video', 'height': 1080, 'h264': False})
+end = time.time() + 120
+while time.time() < end:
+    try:
+        m = inbox.get(timeout=1)
+    except queue.Empty:
+        continue
+    if m and m.get('id') == 'c1' and m.get('type') == 'progress' and m.get('stage') == 'downloading':
+        break
+time.sleep(1)
 send({'type': 'cancel', 'id': 'c1'})
 m = wait_for(lambda m: m.get('id') == 'c1' and m.get('type') in ('done', 'error'), 60, 'cancel')
 check('cancel', m.get('type') == 'error' and m.get('error') == 'Отменено', m.get('error'))
 time.sleep(2)
-left = [f for f in os.listdir(out) if '.part' in f or f.endswith('.ytdl')]
+left = [f for f in os.listdir(cdir) if '.part' in f or f.endswith('.ytdl')]
 check('cancel cleans partial files', not left, left)
 
 p.stdin.close()  # like closing the browser: the helper must exit by itself
