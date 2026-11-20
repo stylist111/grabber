@@ -23,6 +23,8 @@ sys.stdout.reconfigure(encoding='utf-8', errors='replace')  # CI consoles on Win
 
 DEFAULT_URL ='https://www.youtube.com/watch?v=jNQXAC9IVRw'  # "Me at the zoo", 19 s
 LONG_URL = 'https://www.youtube.com/watch?v=aqz-KE-bpKQ'     # Big Buck Bunny, for the cancel test
+FALLBACK_AUDIO = 'https://soundcloud.com/forss/flickermood'
+FALLBACK_VIDEO = 'https://archive.org/details/BigBuckBunny_124'
 
 args = sys.argv[1:]
 url, out, long_url = os.environ.get('GRABBER_TEST_URL') or DEFAULT_URL, None, None
@@ -99,6 +101,15 @@ check('ping', bool(m.get('defaultDir')), f"{time.time() - t0:.1f} s, defaultDir=
 
 send({'type': 'info', 'id': 'i1', 'url': url})
 m = wait_for(lambda m: m.get('id') == 'i1', 180, 'info')
+audio_url = video_url = url
+if not m.get('ok') and 'not a bot' in str(m.get('error')) and url == DEFAULT_URL:
+    # YouTube asks datacenter IPs (GitHub's runners) to sign in. Not our bug: check the same
+    # code paths on sites that don't do that. On a home connection YouTube works.
+    print("SKIP YouTube: this server's IP is asked to sign in; testing on SoundCloud + archive.org")
+    audio_url, video_url = FALLBACK_AUDIO, FALLBACK_VIDEO
+    long_url = FALLBACK_VIDEO
+    send({'type': 'info', 'id': 'i1b', 'url': video_url})
+    m = wait_for(lambda m: m.get('id') == 'i1b', 180, 'info')
 check('info', m.get('ok') and bool(m.get('title')), f"{m.get('title')!r} heights={m.get('heights')}")
 
 send({'type': 'info', 'id': 'i2', 'url': '--exec=evil'})
@@ -106,7 +117,7 @@ m = wait_for(lambda m: m.get('id') == 'i2', 30, 'bad url')
 check('rejects non-http url', m.get('ok') is False)
 
 
-def download(jid, **opts):
+def download(jid, url, **opts):
     send({'type': 'download', 'id': jid, 'dir': out, 'url': url, **opts})
     m = wait_for(lambda m: m.get('id') == jid and m.get('type') in ('done', 'error'), 600, jid)
     f = m.get('file')
@@ -114,10 +125,10 @@ def download(jid, **opts):
     return good, f'{f} ({m.get("size")} bytes)' if good else m.get('error')
 
 
-ok, d = download('a1', mode='audio', audio='mp3', meta=True)
+ok, d = download('a1', audio_url, mode='audio', audio='mp3', meta=True)
 check('audio mp3 (ffmpeg + cover)', ok, d)
-ok, d = download('v1', mode='video', height=360, h264=True)
-check('video 360p mp4 (ffmpeg merge)', ok, d)
+ok, d = download('v1', video_url, mode='video', height=360, h264=True)
+check('video 360p mp4' + (' (ffmpeg merge)' if video_url == url else ''), ok, d)
 
 send({'type': 'download', 'id': 'c1', 'dir': out, 'url': long_url, 'mode': 'video', 'height': 1080, 'h264': False})
 time.sleep(8)

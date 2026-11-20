@@ -64,8 +64,9 @@ main() {
     say "\n\033[90m  Путь уже в буфере обмена: $dir/extension\033[0m\n"
 
     # Страница расширений в Chrome, если он есть (остальные браузеры — вручную, адрес в инструкции).
-    if [ -d "/Applications/Google Chrome.app" ] || [ -d "$HOME/Applications/Google Chrome.app" ]; then
-        open -a "Google Chrome" "chrome://extensions/" 2>/dev/null || true
+    # В фоне: `open` может ждать ответа браузера сколько угодно, а Терминал не должен висеть.
+    if [ -z "${CI:-}" ] && { [ -d "/Applications/Google Chrome.app" ] || [ -d "$HOME/Applications/Google Chrome.app" ]; }; then
+        (open -a "Google Chrome" "chrome://extensions/" >/dev/null 2>&1 &)
     fi
 }
 

@@ -399,7 +399,9 @@ def update_loop():
 
 
 def common_args():
-    a = ['--no-playlist', '--no-warnings', '--remote-components', 'ejs:github']
+    # --encoding: on Windows yt-dlp otherwise writes its messages in the console's code page
+    # ("you’re" came out as "you�re" in error texts).
+    a = ['--no-playlist', '--no-warnings', '--encoding', 'utf-8', '--remote-components', 'ejs:github']
     deno, node = tool('deno'), shutil.which('node', path=search_path())
     if deno:
         a += ['--js-runtimes', f'deno:{deno}']
