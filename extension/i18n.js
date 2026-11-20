@@ -113,6 +113,18 @@
       upd_text: 'Запустите новый установщик — настройки сохранятся.',
       upd_get: 'Скачать',
       upd_later: 'Позже',
+
+      // macOS: t() takes "<key>_mac" instead of "<key>" when it exists.
+      helper_step1_mac: 'Выполните команду установки в <span class="g-kbd">Терминале</span>',
+      helper_help_mac: 'Где взять команду?',
+      open_in_explorer_mac: 'Показать в Finder',
+      help_where_h_mac: 'Команда для установки',
+      help_where_p_mac: '<code class="cmd">curl -fsSL https://raw.githubusercontent.com/stylist111/grabber/main/install.sh | bash</code>',
+      help_s1_mac: 'Откройте «Терминал»: <b>⌘ + Пробел</b> → наберите «Терминал» → <b>Return</b>.',
+      help_s2_mac: 'Вставьте команду выше и нажмите <b>Return</b>. Она сама скачает всё нужное (около 100 МБ) и скажет, что делать дальше.',
+      help_s3_mac: 'Полностью закройте браузер (<b>⌘ + Q</b>) и откройте его снова.',
+      upd_text_mac: 'Выполните команду установки ещё раз — настройки сохранятся.',
+      upd_get_mac: 'Как обновить',
     },
 
     en: {
@@ -223,6 +235,17 @@
       upd_text: 'Run the new installer — your settings stay.',
       upd_get: 'Download',
       upd_later: 'Later',
+
+      helper_step1_mac: 'Run the install command in <span class="g-kbd">Terminal</span>',
+      helper_help_mac: 'Where is the command?',
+      open_in_explorer_mac: 'Show in Finder',
+      help_where_h_mac: 'Install command',
+      help_where_p_mac: '<code class="cmd">curl -fsSL https://raw.githubusercontent.com/stylist111/grabber/main/install.sh | bash</code>',
+      help_s1_mac: 'Open Terminal: <b>⌘ + Space</b> → type “Terminal” → <b>Return</b>.',
+      help_s2_mac: 'Paste the command above and press <b>Return</b>. It downloads everything it needs (about 100 MB) and tells you what to do next.',
+      help_s3_mac: 'Quit the browser completely (<b>⌘ + Q</b>) and open it again.',
+      upd_text_mac: 'Run the install command again — your settings stay.',
+      upd_get_mac: 'How to update',
     },
   };
 
@@ -240,9 +263,12 @@
   }
 
   let lang = detect();
+  // Pages and the service worker both have navigator.userAgent ("Macintosh; Intel Mac OS X" on any Mac).
+  const MAC = /Macintosh|Mac OS X/.test((g.navigator && g.navigator.userAgent) || '');
 
   function t(key, vars) {
-    let s = M[lang][key];
+    let s = MAC ? M[lang][key + '_mac'] : undefined;
+    if (s === undefined) s = M[lang][key];
     if (s === undefined) s = M.en[key];
     if (s === undefined) return key;
     if (vars && typeof s === 'string') s = s.replace(/\{(\w+)\}/g, (_, n) => (vars[n] == null ? '' : vars[n]));
@@ -272,5 +298,5 @@
     return lang;
   }
 
-  g.GrabberI18n = { t, apply, set, load, get lang() { return lang; } };
+  g.GrabberI18n = { t, apply, set, load, mac: MAC, get lang() { return lang; } };
 })(self);

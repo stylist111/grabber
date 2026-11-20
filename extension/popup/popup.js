@@ -27,7 +27,7 @@
   let defaultDir = '';
   async function renderFolder() {
     const { dir } = await chrome.storage.local.get('dir');
-    UI.setFolder({ path: dir || defaultDir || 'Grabber\\downloads', isDefault: !dir });
+    UI.setFolder({ path: dir || defaultDir || (I18n.mac ? 'Grabber/downloads' : 'Grabber\\downloads'), isDefault: !dir });
   }
   renderFolder();
 

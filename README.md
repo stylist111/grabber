@@ -14,9 +14,11 @@
 - Всё работает на вашем компьютере: без серверов, аккаунтов и рекламы
 - Загрузчик обновляется сам — сайты продолжают качаться
 
-**Windows 10/11** · Chrome, Edge, Brave, Яндекс.Браузер
+**Windows 10/11 и macOS 11+** · Chrome, Edge, Brave, Яндекс.Браузер
 
 ## 📥 Установка
+
+### Windows
 
 **Одной командой.** Нажмите **Win + R**, вставьте и нажмите **Enter**:
 
@@ -37,10 +39,23 @@ powershell -NoExit -c "irm https://raw.githubusercontent.com/stylist111/grabber/
 
 В картинках: [установка](docs/guide/ru/Grabber%20—%201.%20Установка.png) · [как скачать](docs/guide/ru/Grabber%20—%202.%20Как%20скачать.png)
 
+### macOS
+
+Откройте **Терминал** (⌘ + Пробел → «Терминал»), вставьте и нажмите **Return**:
+
+```
+curl -fsSL https://raw.githubusercontent.com/stylist111/grabber/main/install.sh | bash
+```
+
+Команда сама скачает последнюю версию, проверит файл и поставит всё в папку `Grabber` в вашей домашней папке.
+Дальше в браузере: **Расширения** → включите **Режим разработчика** → **Загрузить распакованное расширение** →
+**⌘ + Shift + G** → **⌘ + V** (путь уже скопирован) → **Return** → **Выбрать**. Перезапустите браузер (**⌘ + Q**).
+Чтобы обновиться, запустите команду ещё раз.
+
 ## ⚙️ Как устроено
 
 ```
-расширение  ──▶  grabber_host.exe  ──▶  yt-dlp + ffmpeg  ──▶  ваша папка
+расширение  ──▶  grabber_host  ──▶  yt-dlp + ffmpeg  ──▶  ваша папка
 ```
 
 - **`extension/`** — само расширение: окно, загрузки, настройки.
@@ -53,6 +68,7 @@ powershell -NoExit -c "irm https://raw.githubusercontent.com/stylist111/grabber/
 - Каждый релиз собирается [здесь же на GitHub](.github/workflows/release.yml) из открытого кода — с контрольной суммой и [подтверждением происхождения](https://docs.github.com/ru/actions/security-for-github-actions/using-artifact-attestations). Проверить файл:
   ```powershell
   gh attestation verify Grabber-Setup.exe --repo stylist111/grabber
+  gh attestation verify Grabber-macOS.tar.gz --repo stylist111/grabber
   ```
 - Скачивайте **только из [Releases](https://github.com/stylist111/grabber/releases)** этого репозитория.
 - Помощник не открывает сетевых портов и ничего не хранит, кроме локального лога.
@@ -60,9 +76,16 @@ powershell -NoExit -c "irm https://raw.githubusercontent.com/stylist111/grabber/
 
 ## 🛠️ Сборка
 
-Нужно: Windows, Python 3.11+, Node.js, Google Chrome, [Inno Setup 6](https://jrsoftware.org/isinfo.php).
+Windows: Python 3.11+, Node.js, Google Chrome, [Inno Setup 6](https://jrsoftware.org/isinfo.php).
 
 ```powershell
 python -m pip install pyinstaller pillow numpy
 powershell -ExecutionPolicy Bypass -File src\build.ps1   # → dist\Grabber-Setup.exe
+```
+
+macOS: Python 3.11+ с [python.org](https://www.python.org/downloads/macos/) (он «универсальный» — для Apple Silicon и Intel).
+
+```bash
+python3 -m pip install pyinstaller
+bash src/build-mac.sh   # → dist/Grabber-macOS.tar.gz
 ```

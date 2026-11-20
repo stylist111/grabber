@@ -1,15 +1,16 @@
-"""Grabber native host.
+"""Grabber native host (Windows and macOS).
 
-    grabber_host.exe --install      download yt-dlp/ffmpeg/deno, register for browsers
-    grabber_host.exe --uninstall    unregister
-    grabber_host.exe --pickdir DIR  folder dialog (used internally)
-    (no flags)                      native messaging host, started by the browser
+    grabber_host --install      download yt-dlp/ffmpeg/deno, register for browsers
+    grabber_host --uninstall    unregister
+    grabber_host --pickdir DIR  folder dialog (used internally on Windows)
+    (no flags)                  native messaging host, started by the browser
 """
 import base64
 import hashlib
 import json
 import os
 import shutil
+import signal
 import struct
 import subprocess
 import sys
@@ -20,15 +21,20 @@ import urllib.request
 import zipfile
 
 NAME = 'com.grabber.host'
+WIN = sys.platform == 'win32'
+MAC = sys.platform == 'darwin'
+EXE = '.exe' if WIN else ''
 FROZEN = getattr(sys, 'frozen', False)
-# Frozen: Grabber/app/grabber_host.exe. Source: Grabber/src/host.py. Either way ROOT = Grabber/.
+# Frozen: Grabber/app/grabber_host[.exe]. Source: Grabber/src/host.py. Either way ROOT = Grabber/.
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(sys.executable if FROZEN else __file__)))
 BIN = os.path.join(ROOT, 'bin')
 APP = os.path.join(ROOT, 'app')
 DEFAULT_DIR = os.path.join(ROOT, 'downloads')
 LOG = os.path.join(ROOT, 'host.log')
 UPDATE_EVERY = 3 * 3600
-NOWIN = subprocess.CREATE_NO_WINDOW
+NOWIN = subprocess.CREATE_NO_WINDOW if WIN else 0
+# POSIX: every yt-dlp run gets its own process group, so "cancel" also stops the ffmpeg it started.
+GROUP = {} if WIN else {'start_new_session': True}
 BROWSERS = [
     r'Software\Google\Chrome',
     r'Software\Microsoft\Edge',
@@ -36,20 +42,55 @@ BROWSERS = [
     r'Software\Yandex\YandexBrowser',
     r'Software\Chromium',
 ]
-URLS = {
-    'yt-dlp': 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe',
-    'ffmpeg': 'https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip',
-    'deno': 'https://github.com/denoland/deno/releases/latest/download/deno-x86_64-pc-windows-msvc.zip',
-}
+# macOS: per-user manifest folders under ~/Library/Application Support (Chrome's docs + each browser's own).
+MAC_BROWSERS = [
+    'Google/Chrome',
+    'Microsoft Edge',
+    'BraveSoftware/Brave-Browser',
+    'Yandex/YandexBrowser',
+    'Chromium',
+    'Vivaldi',
+    'Arc/User Data',
+]
+
+
+def mac_arch():
+    # Ask the hardware, not this process: under Rosetta platform.machine() would say x86_64.
+    r = subprocess.run(['sysctl', '-n', 'hw.optional.arm64'], capture_output=True, text=True)
+    return 'arm64' if r.stdout.strip() == '1' else 'x64'
+
+
+if WIN:
+    URLS = {
+        'yt-dlp': 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe',
+        'ffmpeg': ['https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip'],
+        'deno': 'https://github.com/denoland/deno/releases/latest/download/deno-x86_64-pc-windows-msvc.zip',
+    }
+elif MAC:
+    _a = mac_arch()
+    _ff = 'https://ffmpeg.martin-riedl.de/redirect/latest/macos/{}/release/'.format('arm64' if _a == 'arm64' else 'amd64')
+    URLS = {
+        'yt-dlp': 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos',  # universal
+        'ffmpeg': [_ff + 'ffmpeg.zip', _ff + 'ffprobe.zip'],
+        'deno': 'https://github.com/denoland/deno/releases/latest/download/deno-{}-apple-darwin.zip'.format(
+            'aarch64' if _a == 'arm64' else 'x86_64'),
+    }
 
 
 def self_cmd(*args):
     return [sys.executable, *args] if FROZEN else [sys.executable, os.path.abspath(__file__), *args]
 
 
+def search_path():
+    p = BIN + os.pathsep + os.environ.get('PATH', '')
+    if MAC:  # a browser started from the Dock gets a bare PATH without Homebrew
+        p += os.pathsep + '/opt/homebrew/bin' + os.pathsep + '/usr/local/bin'
+    return p
+
+
 def tool(name):
-    p = os.path.join(BIN, name + '.exe')
-    return p if os.path.isfile(p) else shutil.which(name)
+    p = os.path.join(BIN, name + EXE)
+    return p if os.path.isfile(p) else shutil.which(name, path=search_path())
 
 
 # --------------------------------------------------------------------------- install
@@ -61,19 +102,46 @@ def ext_id():
     return ''.join(chr(ord('a') + int(c, 16)) for c in h)
 
 
+def fetch_once(url, dest, label):
+    if MAC:
+        # macOS: let the system curl do it. A python.org-built Python (inside the frozen helper)
+        # has no CA certificates of its own, while curl uses the system trust store.
+        subprocess.run(['curl', '-fL', '--retry', '3', '--connect-timeout', '30', '--progress-bar',
+                        '-A', 'Grabber', '-o', dest + '.tmp', url], check=True, stdin=subprocess.DEVNULL)
+    else:
+        req = urllib.request.Request(url, headers={'User-Agent': 'Grabber'})
+        with urllib.request.urlopen(req, timeout=60) as r, open(dest + '.tmp', 'wb') as f:
+            total = int(r.headers.get('Content-Length') or 0)
+            got = 0
+            while chunk := r.read(1 << 20):
+                f.write(chunk)
+                got += len(chunk)
+                if total:
+                    print(f'\r  {label}: {got * 100 // total}%  ({got >> 20} / {total >> 20} МБ)', end='', flush=True)
+        print()
+    os.replace(dest + '.tmp', dest)
+
+
 def fetch(url, dest, label):
     print(f'  Скачиваю {label}…', flush=True)
-    req = urllib.request.Request(url, headers={'User-Agent': 'Grabber'})
-    with urllib.request.urlopen(req, timeout=60) as r, open(dest + '.tmp', 'wb') as f:
-        total = int(r.headers.get('Content-Length') or 0)
-        got = 0
-        while chunk := r.read(1 << 20):
-            f.write(chunk)
-            got += len(chunk)
-            if total:
-                print(f'\r  {label}: {got * 100 // total}%  ({got >> 20} / {total >> 20} МБ)', end='', flush=True)
-    print()
-    os.replace(dest + '.tmp', dest)
+    for attempt in range(3):
+        try:
+            return fetch_once(url, dest, label)
+        except Exception as e:
+            if attempt == 2:
+                raise
+            print(f'  Не получилось ({e}), пробую ещё раз…', flush=True)
+            time.sleep(3)
+
+
+def make_runnable(p):
+    """macOS: zip and urllib drop the exec bit; Apple Silicon also refuses unsigned binaries,
+    so anything without a valid signature gets a local (ad-hoc) one."""
+    if not MAC:
+        return
+    os.chmod(p, 0o755)
+    if subprocess.run(['codesign', '-v', p], capture_output=True).returncode != 0:
+        subprocess.run(['codesign', '--force', '-s', '-', p], capture_output=True)
 
 
 def unzip_exes(zpath, names):
@@ -83,51 +151,89 @@ def unzip_exes(zpath, names):
             if base in names:
                 with z.open(info) as src, open(os.path.join(BIN, base), 'wb') as dst:
                     shutil.copyfileobj(src, dst)
+                make_runnable(os.path.join(BIN, base))
     os.remove(zpath)
 
 
+def host_exe():
+    if FROZEN:
+        return sys.executable
+    # Dev run from source: a small launcher, because a manifest can't pass arguments.
+    os.makedirs(APP, exist_ok=True)
+    if WIN:
+        exe = os.path.join(APP, 'grabber_host.bat')
+        with open(exe, 'w', encoding='ascii') as f:
+            f.write(f'@echo off\r\n"{sys.executable}" -u "{os.path.abspath(__file__)}" %*\r\n')
+    else:
+        exe = os.path.join(APP, 'grabber_host.sh')
+        with open(exe, 'w', encoding='utf-8') as f:
+            f.write(f'#!/bin/sh\nexec "{sys.executable}" -u "{os.path.abspath(__file__)}" "$@"\n')
+        os.chmod(exe, 0o755)
+    return exe
+
+
+def mac_manifest_dirs():
+    """(browser folder, its NativeMessagingHosts folder). Chrome always; the rest only if installed,
+    so we don't leave empty folders of browsers the user doesn't have."""
+    sup = os.path.expanduser('~/Library/Application Support')
+    for b in MAC_BROWSERS:
+        base = os.path.join(sup, b)
+        if b == 'Google/Chrome' or os.path.isdir(base):
+            yield base, os.path.join(base, 'NativeMessagingHosts')
+
+
 def install():
-    import winreg
     os.makedirs(BIN, exist_ok=True)
     os.makedirs(DEFAULT_DIR, exist_ok=True)
     print('1/3 Компоненты')
-    if not os.path.isfile(os.path.join(BIN, 'yt-dlp.exe')):
-        fetch(URLS['yt-dlp'], os.path.join(BIN, 'yt-dlp.exe'), 'yt-dlp')
+    ytdlp = os.path.join(BIN, 'yt-dlp' + EXE)
+    if not os.path.isfile(ytdlp):
+        fetch(URLS['yt-dlp'], ytdlp, 'yt-dlp')
+        make_runnable(ytdlp)
         # Just downloaded the latest release: the first browser start doesn't need to check again.
         with open(os.path.join(BIN, '.last_update'), 'w') as f:
             f.write(time.ctime())
     else:
         print('  yt-dlp уже есть, оставляю (обновится сам)')
-    if not tool('ffmpeg'):
-        z = os.path.join(BIN, 'ffmpeg.zip')
-        fetch(URLS['ffmpeg'], z, 'ffmpeg (~150 МБ)')
-        unzip_exes(z, {'ffmpeg.exe', 'ffprobe.exe'})
+    if not (tool('ffmpeg') and tool('ffprobe')):
+        for url in URLS['ffmpeg']:
+            z = os.path.join(BIN, 'ffmpeg.zip')
+            fetch(url, z, 'ffmpeg (~150 МБ)' if WIN else os.path.basename(url)[:-4])
+            unzip_exes(z, {'ffmpeg' + EXE, 'ffprobe' + EXE})
     else:
         print('  ffmpeg найден:', tool('ffmpeg'))
-    if not (tool('deno') or shutil.which('node')):
+    # Our own Deno, even if the PC has Node: yt-dlp needs Deno 2.3+ or Node 22+, and an old Node
+    # someone installed years ago would silently break YouTube.
+    if not os.path.isfile(os.path.join(BIN, 'deno' + EXE)):
         z = os.path.join(BIN, 'deno.zip')
         fetch(URLS['deno'], z, 'deno (нужен для YouTube)')
-        unzip_exes(z, {'deno.exe'})
+        unzip_exes(z, {'deno' + EXE})
     else:
-        print('  JS-движок найден:', tool('deno') or shutil.which('node'))
+        print('  deno уже есть')
 
     print('2/3 Регистрация в браузерах')
-    exe = sys.executable if FROZEN else os.path.join(APP, 'grabber_host.bat')
-    if not FROZEN:  # dev run from source
-        os.makedirs(APP, exist_ok=True)
-        with open(exe, 'w', encoding='ascii') as f:
-            f.write(f'@echo off\r\n"{sys.executable}" -u "{os.path.abspath(__file__)}" %*\r\n')
-    manifest = os.path.join(APP, NAME + '.json')
-    eid = ext_id()
-    with open(manifest, 'w', encoding='utf-8') as f:
-        json.dump({'name': NAME, 'description': 'Grabber host', 'path': exe, 'type': 'stdio',
-                   'allowed_origins': [f'chrome-extension://{eid}/']}, f, indent=2)
-    for b in BROWSERS:
-        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, rf'{b}\NativeMessagingHosts\{NAME}') as k:
-            winreg.SetValueEx(k, '', 0, winreg.REG_SZ, manifest)
+    exe = host_exe()
+    manifest = {'name': NAME, 'description': 'Grabber host', 'path': exe, 'type': 'stdio',
+                'allowed_origins': [f'chrome-extension://{ext_id()}/']}
+    if WIN:
+        import winreg
+        path = os.path.join(APP, NAME + '.json')
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(manifest, f, indent=2)
+        for b in BROWSERS:
+            with winreg.CreateKey(winreg.HKEY_CURRENT_USER, rf'{b}\NativeMessagingHosts\{NAME}') as k:
+                winreg.SetValueEx(k, '', 0, winreg.REG_SZ, path)
+    else:
+        for base, d in mac_manifest_dirs():
+            os.makedirs(d, exist_ok=True)
+            with open(os.path.join(d, NAME + '.json'), 'w', encoding='utf-8') as f:
+                json.dump(manifest, f, indent=2)
+            print('  ', os.path.relpath(base, os.path.expanduser('~/Library/Application Support')))
 
     print('3/3 Проверка yt-dlp')
     out = subprocess.run([tool('yt-dlp'), '--version'], capture_output=True, text=True).stdout.strip()
+    if not out:
+        raise RuntimeError('yt-dlp не запускается')
     print('  yt-dlp', out)
     ext_dir = os.path.join(ROOT, 'extension')
     copy_to_clipboard(ext_dir)
@@ -135,29 +241,66 @@ def install():
 
 
 def copy_to_clipboard(text):
-    # Windows refuses clipboard writes from a process without a window, so let PowerShell do it.
-    # The text goes through an env var: no quoting issues with odd user names.
-    subprocess.run(['powershell', '-NoProfile', '-NonInteractive', '-Command',
-                    'Set-Clipboard -Value $env:GRABBER_CLIP'],
-                   env=dict(os.environ, GRABBER_CLIP=text), creationflags=NOWIN,
-                   stdin=subprocess.DEVNULL, capture_output=True, timeout=30)
+    try:
+        if MAC:
+            subprocess.run(['pbcopy'], input=text.encode('utf-8'), capture_output=True, timeout=30)
+            return
+        # Windows refuses clipboard writes from a process without a window, so let PowerShell do it.
+        # The text goes through an env var: no quoting issues with odd user names.
+        subprocess.run(['powershell', '-NoProfile', '-NonInteractive', '-Command',
+                        'Set-Clipboard -Value $env:GRABBER_CLIP'],
+                       env=dict(os.environ, GRABBER_CLIP=text), creationflags=NOWIN,
+                       stdin=subprocess.DEVNULL, capture_output=True, timeout=30)
+    except Exception:
+        pass  # the path is printed anyway
 
 
 def uninstall():
-    import winreg
-    ours = os.path.normcase(os.path.join(APP, NAME + '.json'))
-    for b in BROWSERS:
-        key = rf'{b}\NativeMessagingHosts\{NAME}'
-        try:
-            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key) as k:
-                target = winreg.QueryValueEx(k, '')[0]
-            # Only unregister if the browser points at THIS copy: removing a second, older
-            # install must not disconnect the one the user actually runs.
-            if os.path.normcase(target) == ours:
-                winreg.DeleteKey(winreg.HKEY_CURRENT_USER, key)
-        except FileNotFoundError:
-            pass
+    # Only unregister if the browser points at THIS copy: removing a second, older
+    # install must not disconnect the one the user actually runs.
+    if WIN:
+        import winreg
+        ours = os.path.normcase(os.path.join(APP, NAME + '.json'))
+        for b in BROWSERS:
+            key = rf'{b}\NativeMessagingHosts\{NAME}'
+            try:
+                with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key) as k:
+                    target = winreg.QueryValueEx(k, '')[0]
+                if os.path.normcase(target) == ours:
+                    winreg.DeleteKey(winreg.HKEY_CURRENT_USER, key)
+            except FileNotFoundError:
+                pass
+    else:
+        for _, d in mac_manifest_dirs():
+            m = os.path.join(d, NAME + '.json')
+            try:
+                with open(m, encoding='utf-8') as f:
+                    target = json.load(f).get('path', '')
+                if os.path.dirname(target) == APP:
+                    os.remove(m)
+            except (OSError, ValueError):
+                pass
     print('Grabber отключён от браузеров. Папку можно удалить.')
+
+
+def pickdir_mac(initial):
+    """Native folder picker via AppleScript. Text goes in as arguments, never into the script."""
+    if not os.path.isdir(initial):
+        initial = DEFAULT_DIR
+        os.makedirs(initial, exist_ok=True)
+    script = '''on run argv
+    activate
+    try
+        set f to choose folder with prompt (item 1 of argv) default location (POSIX file (item 2 of argv))
+        return POSIX path of f
+    on error
+        return ""
+    end try
+end run'''
+    r = subprocess.run(['osascript', '-e', script, 'Куда сохранять загрузки', initial],
+                       capture_output=True, stdin=subprocess.DEVNULL)
+    p = r.stdout.decode('utf-8').strip()
+    return os.path.normpath(p) if p else None
 
 
 def pickdir(initial):
@@ -209,7 +352,7 @@ def read():
 
 def env():
     e = dict(os.environ, PYTHONIOENCODING='utf-8', PYTHONUTF8='1')
-    e['PATH'] = BIN + os.pathsep + e.get('PATH', '')
+    e['PATH'] = search_path()
     return e
 
 
@@ -257,7 +400,7 @@ def update_loop():
 
 def common_args():
     a = ['--no-playlist', '--no-warnings', '--remote-components', 'ejs:github']
-    deno, node = tool('deno'), shutil.which('node')
+    deno, node = tool('deno'), shutil.which('node', path=search_path())
     if deno:
         a += ['--js-runtimes', f'deno:{deno}']
     elif node:
@@ -345,7 +488,7 @@ def do_download(msg):
 
     started = time.time() - 1
     p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
-                         env=env(), creationflags=NOWIN)
+                         env=env(), creationflags=NOWIN, **GROUP)
     _procs[jid] = p
     path, tail, last = None, [], 0.0
     for raw in p.stdout:
@@ -369,13 +512,21 @@ def do_download(msg):
     p.wait()
     _procs.pop(jid, None)
     if jid in _cancelled:
-        for f in os.listdir(out_dir):  # drop this job's partial files
-            fp = os.path.join(out_dir, f)
-            if ('.part' in f or f.endswith('.ytdl')) and os.path.getmtime(fp) >= started:
+        # Drop this job's partial files. Windows keeps them locked for a moment after the kill.
+        for _ in range(20):
+            left = 0
+            for f in os.listdir(out_dir):
+                fp = os.path.join(out_dir, f)
                 try:
-                    os.remove(fp)
+                    if ('.part' in f or f.endswith('.ytdl')) and os.path.getmtime(fp) >= started:
+                        left += 1
+                        os.remove(fp)
+                        left -= 1
                 except OSError:
                     pass
+            if not left:
+                break
+            time.sleep(0.5)
         raise RuntimeError('Отменено')
     if p.returncode != 0:
         raise RuntimeError(clean_err('\n'.join(tail)))
@@ -391,9 +542,14 @@ def run_job(msg):
         elif msg['type'] == 'download':
             send({'type': 'done', 'id': jid, **do_download(msg)})
         elif msg['type'] == 'pickdir':
-            r = subprocess.run(self_cmd('--pickdir', msg.get('initial') or DEFAULT_DIR),
-                               capture_output=True, creationflags=NOWIN, stdin=subprocess.DEVNULL)
-            send({'type': 'pickdir', 'id': jid, 'path': r.stdout.decode('utf-8').strip() or None})
+            initial = msg.get('initial') or DEFAULT_DIR
+            if MAC:
+                path = pickdir_mac(initial)
+            else:
+                r = subprocess.run(self_cmd('--pickdir', initial),
+                                   capture_output=True, creationflags=NOWIN, stdin=subprocess.DEVNULL)
+                path = r.stdout.decode('utf-8').strip() or None
+            send({'type': 'pickdir', 'id': jid, 'path': path})
     except Exception as e:
         if not isinstance(e, RuntimeError):
             log(traceback.format_exc())
@@ -407,16 +563,23 @@ def cancel(jid):
     p = _procs.get(jid)
     if p:
         _cancelled.add(jid)
-        subprocess.run(['taskkill', '/PID', str(p.pid), '/T', '/F'], capture_output=True, creationflags=NOWIN)
+        if WIN:
+            subprocess.run(['taskkill', '/PID', str(p.pid), '/T', '/F'], capture_output=True, creationflags=NOWIN)
+        else:
+            try:
+                os.killpg(p.pid, signal.SIGKILL)  # yt-dlp and the ffmpeg it started
+            except OSError:
+                pass
 
 
 def open_path(p):
     if p and os.path.isfile(p):
-        subprocess.Popen(['explorer', '/select,', os.path.normpath(p)])
+        cmd = ['open', '-R', p] if MAC else ['explorer', '/select,', os.path.normpath(p)]
     else:
         p = p or DEFAULT_DIR
         os.makedirs(p, exist_ok=True)
-        subprocess.Popen(['explorer', os.path.normpath(p)])
+        cmd = ['open', p] if MAC else ['explorer', os.path.normpath(p)]
+    subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 def host():

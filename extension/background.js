@@ -177,8 +177,9 @@ async function checkUpdate(force) {
     const rel = await r.json();
     const version = String(rel.tag_name || '').replace(/^v/, '');
     const setup = (rel.assets || []).find((a) => /Setup\.exe$/i.test(a.name));
-    const update = isNewer(version, chrome.runtime.getManifest().version, 2)
-      ? { version, url: setup ? setup.browser_download_url : rel.html_url } : null;
+    // Mac: there is no file to download, the update is the same Terminal command as the install.
+    const url = self.GrabberI18n.mac ? `https://github.com/${REPO}#macos` : setup ? setup.browser_download_url : rel.html_url;
+    const update = isNewer(version, chrome.runtime.getManifest().version, 2) ? { version, url } : null;
     await chrome.storage.local.set({ updateCheckedAt: Date.now(), update });
   } catch { /* offline — try again next time */ }
 }

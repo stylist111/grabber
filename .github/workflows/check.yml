@@ -1,0 +1,116 @@
+# End-to-end check on clean machines: build → install the way a user does → talk to the helper
+# like the browser does (src/smoke_test.py: search, mp3, video merge, cancel).
+# macOS on Apple Silicon and on Intel, plus Windows. Runs on every push and by hand (Actions → Check).
+name: Check
+
+on:
+  push:
+    branches: ['**']
+    paths: ['src/host.py', 'src/build*', 'src/setup.iss', 'src/smoke_test.py', 'install.*', 'extension/**', '.github/workflows/**']
+  workflow_dispatch:
+    inputs:
+      url:
+        description: 'Video to test with (empty = YouTube "Me at the zoo")'
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install build tools
+        run: |
+          curl -fsSL -o python.pkg https://www.python.org/ftp/python/3.13.17/python-3.13.17-macos11.pkg
+          sudo installer -pkg python.pkg -target /
+          rm python.pkg
+          /Library/Frameworks/Python.framework/Versions/3.13/bin/python3 -m pip install pyinstaller==6.22.3
+      - name: Build package
+        run: PYTHON=/Library/Frameworks/Python.framework/Versions/3.13/bin/python3 bash src/build-mac.sh
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: macos
+          path: dist/Grabber-macOS.tar.gz
+
+  test-macos:
+    needs: build-macos
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-latest, macos-15-intel]   # Apple Silicon, Intel
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: macos
+          path: dist
+
+      - name: Install with install.sh (as a user would)
+        run: |
+          (cd dist && shasum -a 256 Grabber-macOS.tar.gz > SHA256SUMS.txt)
+          GRABBER_BASE="file://$PWD/dist" bash install.sh
+
+      - name: What got installed
+        run: |
+          uname -m; sysctl -n hw.optional.arm64 || true
+          lipo -archs ~/Grabber/app/grabber_host
+          ls -la ~/Grabber ~/Grabber/bin
+          for f in ~/Grabber/bin/*; do echo "== $f"; file "$f"; codesign -dv "$f" 2>&1 | grep -E 'Signature|Authority|TeamIdentifier' || true; done
+          ~/Grabber/bin/ffmpeg -version | head -1
+          ~/Grabber/bin/deno --version | head -1
+          cat ~/"Library/Application Support/Google/Chrome/NativeMessagingHosts/com.grabber.host.json"
+
+      - name: Talk to the helper like the browser does
+        env:
+          GRABBER_TEST_URL: ${{ inputs.url }}
+        run: python3 src/smoke_test.py ~/Grabber/app/grabber_host
+
+      - name: Second run = update (keeps bin/, nothing re-downloaded)
+        run: |
+          set -o pipefail
+          GRABBER_BASE="file://$PWD/dist" bash install.sh | tee second.log
+          grep -q 'обновлён' second.log
+          ! grep -q 'Скачиваю' second.log
+
+      - name: Uninstall removes the browser registration
+        run: |
+          ~/Grabber/app/grabber_host --uninstall
+          ! test -e ~/"Library/Application Support/Google/Chrome/NativeMessagingHosts/com.grabber.host.json"
+
+      - name: Helper log
+        if: always()
+        run: cat ~/Grabber/host.log || true
+
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.11'
+      - name: Build installer
+        shell: pwsh
+        run: |
+          python -m pip install pyinstaller==6.22.3
+          choco install innosetup --no-progress -y
+          ./src/build.ps1 -SkipRender
+      - name: Install silently (as install.ps1 does)
+        shell: pwsh
+        run: |
+          $p = Start-Process dist/Grabber-Setup.exe -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait -PassThru
+          Get-Content "$env:USERPROFILE\Grabber\install.log"
+          if ($p.ExitCode) { throw "installer exit $($p.ExitCode)" }
+      - name: Talk to the helper like the browser does
+        shell: pwsh
+        env:
+          GRABBER_TEST_URL: ${{ inputs.url }}
+        run: python src/smoke_test.py "$env:USERPROFILE\Grabber\app\grabber_host.exe"
+      - name: Helper log
+        if: always()
+        shell: pwsh
+        run: Get-Content "$env:USERPROFILE\Grabber\host.log" -ErrorAction SilentlyContinue
