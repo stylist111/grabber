@@ -23,6 +23,21 @@ cp -R "$work/dist/grabber_host" "$stage/app"
 cp -R "$root/extension" "$stage/extension"
 lipo -archs "$stage/app/grabber_host"   # expect: x86_64 arm64
 
+# macOS refuses to load a bundle whose signature seal doesn't match its files ("Python.framework is
+# damaged"). PyInstaller copies only part of python.org's signed framework, so seal it again (ad-hoc)
+# over what is actually there, then insist on a strict check — the same one the system does.
+fw="$stage/app/_internal/Python.framework"
+echo "--- signature as PyInstaller left it:"
+codesign --verify --deep --strict --verbose=2 "$fw" 2>&1 || true
+codesign --force --deep --sign - "$fw"
+codesign --force --sign - "$stage/app/grabber_host"
+echo "--- after re-signing:"
+codesign --verify --deep --strict --verbose=2 "$fw"
+codesign --verify --deep --strict --verbose=2 "$stage/app/grabber_host"
+find "$stage/app/_internal" -name '*.so' -o -name '*.dylib' | while read -r f; do
+    codesign --verify --strict "$f" || { echo "bad signature: $f"; exit 1; }
+done
+
 mkdir -p "$root/dist"
 # COPYFILE_DISABLE: no ._* resource-fork files in the archive.
 COPYFILE_DISABLE=1 tar -czf "$root/dist/Grabber-macOS.tar.gz" -C "$work" Grabber
