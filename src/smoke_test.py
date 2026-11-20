@@ -19,7 +19,9 @@ import tempfile
 import threading
 import time
 
-DEFAULT_URL = 'https://www.youtube.com/watch?v=jNQXAC9IVRw'  # "Me at the zoo", 19 s
+sys.stdout.reconfigure(encoding='utf-8', errors='replace')  # CI consoles on Windows are cp1252
+
+DEFAULT_URL ='https://www.youtube.com/watch?v=jNQXAC9IVRw'  # "Me at the zoo", 19 s
 LONG_URL = 'https://www.youtube.com/watch?v=aqz-KE-bpKQ'     # Big Buck Bunny, for the cancel test
 
 args = sys.argv[1:]

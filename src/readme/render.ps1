@@ -60,4 +60,16 @@ try {
 } finally {
     Stop-Ours
 }
+
+# 3. README download buttons (transparent corners, 2x)
+$buttons = "file:///" + ("$here\buttons.html" -replace '\\', '/')
+foreach ($b in @(@('win', 'btn-windows.png'), @('mac', 'btn-macos.png'))) {
+    $out = "$root\docs\$($b[1])"
+    $p = Start-Process -FilePath $chrome -PassThru -WindowStyle Hidden -ArgumentList @(
+        '--headless=new', '--disable-gpu', '--hide-scrollbars', '--force-device-scale-factor=2',
+        "--user-data-dir=$tmp\profile-btn", '--allow-file-access-from-files', '--virtual-time-budget=3000',
+        '--default-background-color=00000000', '--window-size=340,80', "--screenshot=$out", "$buttons`?os=$($b[0])")
+    if (-not $p.WaitForExit(60000)) { Stop-Ours; throw "button render timed out: $($b[0])" }
+    if (-not (Test-Path $out)) { throw "button render failed: $($b[0])" }
+}
 Write-Host "OK: $root\docs"

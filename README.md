@@ -6,6 +6,12 @@
 
 Внутри — [yt-dlp](https://github.com/yt-dlp/yt-dlp), лучший открытый загрузчик видео. Grabber даёт ему удобное окно прямо в браузере.
 
+<p align="center">
+  <a href="https://github.com/stylist111/grabber/releases/latest/download/Grabber-Setup.exe"><img src="docs/btn-windows.png" alt="Скачать для Windows" width="300"></a>
+  &nbsp;
+  <a href="#macos"><img src="docs/btn-macos.png" alt="Установить на Mac" width="300"></a>
+</p>
+
 ## ✨ Что умеет
 
 - Видео до **4K** или **MP4 (H.264 + AAC)** — открывается в любом плеере и монтажке
