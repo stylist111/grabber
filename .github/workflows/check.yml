@@ -69,6 +69,14 @@ jobs:
           GRABBER_TEST_URL: ${{ inputs.url }}
         run: python3 src/smoke_test.py ~/Grabber/app/grabber_host
 
+      # Chrome flags every file its child processes write; macOS then refuses to load flagged
+      # unsigned code. A plain run from the shell can't see that, so emulate it — and let the
+      # helper re-download yt-dlp under it, the way its auto-update does.
+      - name: Like under Chrome (quarantine) + yt-dlp update
+        run: |
+          rm -rf ~/Grabber/bin/yt-dlp_macos
+          python3 src/smoke_test.py --quarantine --update-first ~/Grabber/app/grabber_host
+
       - name: Second run = update (keeps bin/, nothing re-downloaded)
         run: |
           set -o pipefail

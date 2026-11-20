@@ -8,6 +8,12 @@
 
 Checks: ping, media info, audio download (mp3 via ffmpeg), video download (video+audio merged
 by ffmpeg), cancel of a running download. Exit code 0 = all good.
+
+macOS only:
+    --quarantine    behave like Chrome: this process and everything it starts get the quarantine
+                    flag, so every file the helper and yt-dlp write is flagged too. Checks that the
+                    helper never runs code it wrote itself (that's what gave "Python.framework is damaged").
+    --update-first  ask the helper to update yt-dlp first (with --quarantine: the update must land unflagged).
 """
 import json
 import os
@@ -21,7 +27,7 @@ import time
 
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')  # CI consoles on Windows are cp1252
 
-DEFAULT_URL ='https://www.youtube.com/watch?v=jNQXAC9IVRw'  # "Me at the zoo", 19 s
+DEFAULT_URL = 'https://www.youtube.com/watch?v=jNQXAC9IVRw'  # "Me at the zoo", 19 s
 LONG_URL = 'https://www.youtube.com/watch?v=aqz-KE-bpKQ'     # Big Buck Bunny, for the cancel test
 FALLBACK_AUDIO = 'https://soundcloud.com/forss/flickermood'
 FALLBACK_VIDEO = 'https://archive.org/details/BigBuckBunny_124'
@@ -39,11 +45,40 @@ for flag in ('--url', '--out', '--long-url'):
             out = val
         else:
             long_url = val
+QUARANTINE, UPDATE_FIRST = '--quarantine' in args, '--update-first' in args
+args = [a for a in args if a not in ('--quarantine', '--update-first')]
 long_url = long_url or (LONG_URL if url == DEFAULT_URL else url)
 if not args:
     sys.exit(__doc__)
 out = out or tempfile.mkdtemp(prefix='grabber-smoke-')
 os.makedirs(out, exist_ok=True)
+started = time.time() - 1
+
+
+def flagged(path):
+    r = subprocess.run(['xattr', '-lr', path], capture_output=True, text=True)
+    return 'com.apple.quarantine' in r.stdout
+
+
+if QUARANTINE:
+    # What Chrome gets from LSFileQuarantineEnabled: the process (and its children) are marked, and
+    # every file they create carries com.apple.quarantine. Private but stable libquarantine API.
+    import ctypes
+    q = ctypes.CDLL('/usr/lib/system/libquarantine.dylib')
+    q.qtn_proc_alloc.restype = ctypes.c_void_p
+    q.qtn_proc_set_identifier.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+    q.qtn_proc_set_flags.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+    q.qtn_proc_apply_to_self.argtypes = [ctypes.c_void_p]
+    qp = q.qtn_proc_alloc()
+    q.qtn_proc_set_identifier(qp, b'GrabberSmokeTest')
+    q.qtn_proc_set_flags(qp, 0x0001)  # QTN_FLAG_DOWNLOAD
+    rc = q.qtn_proc_apply_to_self(qp)
+    probe = os.path.join(out, 'probe.txt')
+    open(probe, 'w').close()
+    if rc != 0 or not flagged(probe):
+        sys.exit(f'FAIL could not turn on quarantine for this process (rc={rc})')
+    os.remove(probe)
+    print('OK   quarantine on: files written from here on are flagged, like under Chrome')
 
 p = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
 inbox = queue.Queue()
@@ -98,6 +133,15 @@ t0 = time.time()
 send({'type': 'ping', 'id': 'p1'})
 m = wait_for(lambda m: m.get('type') == 'pong', 60, 'ping')
 check('ping', bool(m.get('defaultDir')), f"{time.time() - t0:.1f} s, defaultDir={m.get('defaultDir')}")
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(args[-1])))  # .../Grabber/app/grabber_host → .../Grabber
+
+if UPDATE_FIRST:
+    send({'type': 'update'})
+    wait_for(lambda m: m.get('type') == 'update' and m.get('status') == 'updating', 120, 'update start')
+    m = wait_for(lambda m: m.get('type') == 'update' and m.get('status') != 'updating', 600, 'update')
+    check('yt-dlp update', m.get('status') == 'ok' and bool(m.get('version')), m.get('version'))
+    if QUARANTINE:
+        check('updated yt-dlp is not flagged', not flagged(os.path.join(ROOT, 'bin')))
 
 send({'type': 'info', 'id': 'i1', 'url': url})
 m = wait_for(lambda m: m.get('id') == 'i1', 180, 'info')
@@ -127,6 +171,9 @@ def download(jid, url, **opts):
 
 ok, d = download('a1', audio_url, mode='audio', audio='mp3', meta=True)
 check('audio mp3 (ffmpeg + cover)', ok, d)
+if QUARANTINE and ok:
+    mp3 = [f for f in os.listdir(out) if f.endswith('.mp3')]
+    check('downloads are flagged (proves the Chrome emulation works)', mp3 and flagged(os.path.join(out, mp3[0])))
 ok, d = download('v1', video_url, mode='video', height=360, h264=True)
 check('video 360p mp4' + (' (ffmpeg merge)' if video_url == url else ''), ok, d)
 
@@ -134,17 +181,22 @@ check('video 360p mp4' + (' (ffmpeg merge)' if video_url == url else ''), ok, d)
 # and cancel as soon as bytes flow, before a fast runner finishes the whole file.
 cdir = os.path.join(out, 'cancel')
 send({'type': 'download', 'id': 'c1', 'dir': cdir, 'url': long_url, 'mode': 'video', 'height': 1080, 'h264': False})
-end = time.time() + 120
+end, m = time.time() + 120, None
 while time.time() < end:
     try:
         m = inbox.get(timeout=1)
     except queue.Empty:
         continue
-    if m and m.get('id') == 'c1' and m.get('type') == 'progress' and m.get('stage') == 'downloading':
+    if m and m.get('id') == 'c1' and m.get('type') in ('done', 'error'):
+        print('   <-', json.dumps(m, ensure_ascii=False)[:300])  # finished before we could cancel
         break
-time.sleep(1)
-send({'type': 'cancel', 'id': 'c1'})
-m = wait_for(lambda m: m.get('id') == 'c1' and m.get('type') in ('done', 'error'), 60, 'cancel')
+    if m and m.get('id') == 'c1' and m.get('type') == 'progress' and m.get('stage') == 'downloading':
+        m = None
+        break
+if m is None or m.get('type') not in ('done', 'error'):
+    time.sleep(1)
+    send({'type': 'cancel', 'id': 'c1'})
+    m = wait_for(lambda m: m.get('id') == 'c1' and m.get('type') in ('done', 'error'), 60, 'cancel')
 check('cancel', m.get('type') == 'error' and m.get('error') == 'Отменено', m.get('error'))
 time.sleep(2)
 left = [f for f in os.listdir(cdir) if '.part' in f or f.endswith('.ytdl')]
@@ -157,6 +209,14 @@ try:
 except subprocess.TimeoutExpired:
     p.kill()
     check('exits when the browser goes away', False)
+
+if sys.platform == 'darwin':
+    # One-file PyInstaller programs unpack into $TMPDIR/_MEI*; under Chrome that copy is flagged
+    # and macOS won't load it. Nothing we start may do that.
+    tmp = tempfile.gettempdir()
+    mei = [d for d in os.listdir(tmp) if d.startswith('_MEI') and os.path.getmtime(os.path.join(tmp, d)) >= started]
+    check('nothing unpacked into the temp folder', not mei, mei)
+    check('helper files are not flagged', not flagged(os.path.join(ROOT, 'app')) and not flagged(os.path.join(ROOT, 'bin')))
 
 print('\nfiles in', out, ':', sorted(os.listdir(out)))
 sys.exit(f'\n{len(failed)} check(s) failed: {failed}' if failed else 0)

@@ -70,7 +70,10 @@ elif MAC:
     _a = mac_arch()
     _ff = 'https://ffmpeg.martin-riedl.de/redirect/latest/macos/{}/release/'.format('arm64' if _a == 'arm64' else 'amd64')
     URLS = {
-        'yt-dlp': 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos',  # universal
+        # The folder build (universal), not the one-file yt-dlp_macos: that one unpacks its Python into
+        # a temp folder on every run, the unpacked files inherit Chrome's quarantine flag, and macOS
+        # refuses to load them ("Python.framework is damaged").
+        'yt-dlp': 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos.zip',
         'ffmpeg': [_ff + 'ffmpeg.zip', _ff + 'ffprobe.zip'],
         'deno': 'https://github.com/denoland/deno/releases/latest/download/deno-{}-apple-darwin.zip'.format(
             'aarch64' if _a == 'arm64' else 'x86_64'),
@@ -88,9 +91,58 @@ def search_path():
     return p
 
 
+YTDLP_DIR = os.path.join(BIN, 'yt-dlp_macos')  # macOS: yt-dlp's folder build lives here
+
+
 def tool(name):
-    p = os.path.join(BIN, name + EXE)
+    if MAC and name == 'yt-dlp':
+        p = os.path.join(YTDLP_DIR, 'yt-dlp_macos')
+    else:
+        p = os.path.join(BIN, name + EXE)
     return p if os.path.isfile(p) else shutil.which(name, path=search_path())
+
+
+def has_quarantine(path):
+    r = subprocess.run(['xattr', '-lr', path], capture_output=True, text=True)
+    return 'com.apple.quarantine' in r.stdout
+
+
+def mac_install_ytdlp(label='yt-dlp'):
+    """Download yt-dlp's folder build and swap it in. Also how it updates on macOS: `yt-dlp -U`
+    doesn't support the folder build, and anything a process started by Chrome writes gets
+    Chrome's quarantine flag — so the fresh copy is unflagged before anything runs it."""
+    new, old = YTDLP_DIR + '.new', YTDLP_DIR + '.old'
+    shutil.rmtree(new, ignore_errors=True)
+    z = os.path.join(BIN, 'yt-dlp_macos.zip')
+    fetch(URLS['yt-dlp'], z, label)
+    try:
+        subprocess.run(['ditto', '-x', '-k', z, new], check=True, capture_output=True)  # keeps exec bits
+    finally:
+        os.remove(z)
+    subprocess.run(['xattr', '-dr', 'com.apple.quarantine', new], capture_output=True)
+    if has_quarantine(new):  # never run it flagged: macOS would show the "damaged" dialog
+        shutil.rmtree(new, ignore_errors=True)
+        raise RuntimeError('не удалось снять карантин с новой версии yt-dlp')
+    r = subprocess.run([os.path.join(new, 'yt-dlp_macos'), '--version'], capture_output=True, text=True,
+                       stdin=subprocess.DEVNULL, timeout=120)
+    if r.returncode or not r.stdout.strip():
+        shutil.rmtree(new, ignore_errors=True)
+        raise RuntimeError('новая версия yt-dlp не запускается: ' + (r.stderr or '').strip()[-300:])
+    shutil.rmtree(old, ignore_errors=True)
+    if os.path.isdir(YTDLP_DIR):
+        os.rename(YTDLP_DIR, old)  # a running yt-dlp keeps working from the renamed folder
+    os.rename(new, YTDLP_DIR)
+    shutil.rmtree(old, ignore_errors=True)
+    return r.stdout.strip()
+
+
+def mac_latest_ytdlp():
+    # The "latest" page redirects to .../releases/tag/<version>. curl: the system trust store.
+    r = subprocess.run(['curl', '-fsSLI', '-o', '/dev/null', '-w', '%{url_effective}', '-A', 'Grabber',
+                        'https://github.com/yt-dlp/yt-dlp/releases/latest'],
+                       capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL)
+    tag = r.stdout.strip().rsplit('/', 1)[-1]
+    return tag if r.returncode == 0 and tag[:1].isdigit() else None
 
 
 # --------------------------------------------------------------------------- install
@@ -106,7 +158,9 @@ def fetch_once(url, dest, label):
     if MAC:
         # macOS: let the system curl do it. A python.org-built Python (inside the frozen helper)
         # has no CA certificates of its own, while curl uses the system trust store.
-        subprocess.run(['curl', '-fL', '--retry', '3', '--connect-timeout', '30', '--progress-bar',
+        # Progress bar only in the Terminal; when the browser runs us (update) stay quiet.
+        quiet = '--progress-bar' if sys.stdout.isatty() else '-sS'
+        subprocess.run(['curl', '-fL', '--retry', '3', '--connect-timeout', '30', quiet,
                         '-A', 'Grabber', '-o', dest + '.tmp', url], check=True, stdin=subprocess.DEVNULL)
     else:
         req = urllib.request.Request(url, headers={'User-Agent': 'Grabber'})
@@ -186,10 +240,16 @@ def install():
     os.makedirs(BIN, exist_ok=True)
     os.makedirs(DEFAULT_DIR, exist_ok=True)
     print('1/3 Компоненты')
-    ytdlp = os.path.join(BIN, 'yt-dlp' + EXE)
-    if not os.path.isfile(ytdlp):
-        fetch(URLS['yt-dlp'], ytdlp, 'yt-dlp')
-        make_runnable(ytdlp)
+    if MAC:
+        stale = os.path.join(BIN, 'yt-dlp')  # the one-file build from the first test versions
+        if os.path.isfile(stale):
+            os.remove(stale)
+    ytdlp = tool('yt-dlp') if MAC else os.path.join(BIN, 'yt-dlp' + EXE)
+    if not (ytdlp and ytdlp.startswith(BIN) and os.path.isfile(ytdlp)):
+        if MAC:
+            mac_install_ytdlp()
+        else:
+            fetch(URLS['yt-dlp'], ytdlp, 'yt-dlp')
         # Just downloaded the latest release: the first browser start doesn't need to check again.
         with open(os.path.join(BIN, '.last_update'), 'w') as f:
             f.write(time.ctime())
@@ -373,14 +433,24 @@ def do_update(force=False):
     with _update_lock:
         exe = tool('yt-dlp')
         due = force or not os.path.isfile(stamp) or time.time() - os.path.getmtime(stamp) > UPDATE_EVERY
-        if exe and due and exe.startswith(BIN):
+        ours = (exe and exe.startswith(BIN)) or (MAC and not exe)  # Mac: also (re)installs a missing one
+        if ours and due:
             _update_state['status'] = 'updating'
             send({'type': 'update', **_update_state})
             try:
-                r = subprocess.run([exe, '-U'], capture_output=True, text=True, env=env(),
-                                   creationflags=NOWIN, timeout=180, stdin=subprocess.DEVNULL)
-                log('update:', (r.stdout + r.stderr).strip().replace('\n', ' | '))
-                _update_state['status'] = 'ok' if r.returncode == 0 else 'failed'
+                if MAC:
+                    current, latest = (exe and ytdlp_version()), mac_latest_ytdlp()
+                    if not latest:
+                        raise RuntimeError('GitHub не ответил')
+                    if latest != current:
+                        mac_install_ytdlp()
+                    log('update:', current, '->', latest)
+                    _update_state['status'] = 'ok'
+                else:
+                    r = subprocess.run([exe, '-U'], capture_output=True, text=True, env=env(),
+                                       creationflags=NOWIN, timeout=180, stdin=subprocess.DEVNULL)
+                    log('update:', (r.stdout + r.stderr).strip().replace('\n', ' | '))
+                    _update_state['status'] = 'ok' if r.returncode == 0 else 'failed'
                 with open(stamp, 'w') as f:
                     f.write(time.ctime())
             except Exception as e:
@@ -553,8 +623,7 @@ def run_job(msg):
                 path = r.stdout.decode('utf-8').strip() or None
             send({'type': 'pickdir', 'id': jid, 'path': path})
     except Exception as e:
-        if not isinstance(e, RuntimeError):
-            log(traceback.format_exc())
+        log(traceback.format_exc() if not isinstance(e, RuntimeError) else f'{jid} {msg["type"]} failed: {e}')
         send({'type': 'error' if msg['type'] == 'download' else msg['type'],
               'id': jid, 'ok': False, 'error': str(e)})
     finally:
