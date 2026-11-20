@@ -74,6 +74,7 @@ jobs:
       # helper re-download yt-dlp under it, the way its auto-update does.
       - name: Like under Chrome (quarantine) + yt-dlp update
         run: |
+          for l in /usr/lib/system/libquarantine.dylib /usr/lib/system/libsystem_kernel.dylib /usr/lib/libSystem.B.dylib; do echo "== $l"; dyld_info -exports "$l" 2>&1 | grep -i qtn | head -40; done
           rm -rf ~/Grabber/bin/yt-dlp_macos
           python3 src/smoke_test.py --quarantine --update-first ~/Grabber/app/grabber_host
 
