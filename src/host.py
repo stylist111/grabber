@@ -536,7 +536,10 @@ def do_download(msg):
     out_dir = msg.get('dir') or DEFAULT_DIR
     os.makedirs(out_dir, exist_ok=True)
 
-    args = [tool('yt-dlp'), *common_args(), '--newline', '--progress', '--windows-filenames',
+    # Downloads keep yt-dlp's warnings: they only go to host.log, and they explain things like
+    # a cover that didn't get embedded.
+    args = [tool('yt-dlp'), *[a for a in common_args() if a != '--no-warnings'],
+            '--newline', '--progress', '--windows-filenames',
             '-o', os.path.join(out_dir, '%(title).150B [%(id)s].%(ext)s'),
             '--progress-template', 'download:GRABDL %(progress.downloaded_bytes)s %(progress.total_bytes)s '
                                    '%(progress.total_bytes_estimate)s %(progress.speed)s %(progress.eta)s',

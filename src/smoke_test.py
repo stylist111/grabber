@@ -18,6 +18,7 @@ macOS only:
 import json
 import os
 import queue
+import shutil
 import struct
 import subprocess
 import sys
@@ -173,8 +174,14 @@ def download(jid, url, **opts):
 
 ok, d = download('a1', audio_url, mode='audio', audio='mp3', meta=True)
 check('audio mp3 (ffmpeg + cover)', ok, d)
+mp3 = [f for f in os.listdir(out) if f.endswith('.mp3')]
+ffprobe = shutil.which('ffprobe', path=os.path.join(ROOT, 'bin') + os.pathsep + os.environ.get('PATH', '')
+                       + os.pathsep + '/opt/homebrew/bin')
+if ok and mp3 and ffprobe:
+    r = subprocess.run([ffprobe, '-v', 'error', '-show_entries', 'stream=codec_type', '-of', 'csv=p=0',
+                        os.path.join(out, mp3[0])], capture_output=True, text=True)
+    check('mp3 has the cover inside', 'video' in r.stdout.split(), r.stdout.split())
 if QUARANTINE and ok:
-    mp3 = [f for f in os.listdir(out) if f.endswith('.mp3')]
     check('downloads are flagged (proves the Chrome emulation works)', mp3 and flagged(os.path.join(out, mp3[0])))
 ok, d = download('v1', video_url, mode='video', height=360, h264=True)
 check('video 360p mp4' + (' (ffmpeg merge)' if video_url == url else ''), ok, d)
